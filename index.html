@@ -291,9 +291,17 @@ const KEY_INDICATORS = [
 ];
 
 const ABBR_MAP = {
-  'WBC': 'wbc', 'RBC': 'rbc', 'HGB': 'hgb', 'HB': 'hgb', 'PLT': 'plt',
-  'NEUT#': 'anc', 'ANC': 'anc', 'NEU#': 'anc', 'NEUT': 'anc',
-  'LY#': 'lymph', 'LYMPH#': 'lymph', 'LYMPH': 'lymph', 'LYM#': 'lymph',
+  'WBC': 'wbc', 'W': 'wbc',
+  'RBC': 'rbc', 'R': 'rbc',
+  'HGB': 'hgb', 'HB': 'hgb', 'Hb': 'hgb',
+  'PLT': 'plt', 'BPC': 'plt',
+  'NEUT#': 'anc', 'ANC': 'anc', 'NEU#': 'anc', 'NEUT': 'anc', 'N#': 'anc', 'GRAN#': 'anc', 'GR#': 'anc', 'NE#': 'anc',
+  'LY#': 'lymph', 'LYMPH#': 'lymph', 'LYMPH': 'lymph', 'LYM#': 'lymph', 'L#': 'lymph', 'LYM': 'lymph',
+};
+const NAME_MAP = {
+  '白细胞': 'wbc', '红细胞': 'rbc', '血红蛋白': 'hgb', '血小板': 'plt',
+  '中性粒细胞绝对值': 'anc', '中性粒细胞计数': 'anc', '中性粒细胞数': 'anc', '中性粒细胞数目': 'anc',
+  '淋巴细胞绝对值': 'lymph', '淋巴细胞计数': 'lymph', '淋巴细胞数': 'lymph', '淋巴细胞数目': 'lymph',
 };
 
 let localDB, currentImages = [], currentAllIndicators = [], editingId = null, trendChart = null, activeChartKey = 'wbc';
@@ -558,8 +566,9 @@ async function ocrExtract() {
     let filled = 0;
     for (const ind of allIndicators) {
       const abbr = (ind.abbr || '').toUpperCase();
-      const mapped = ABBR_MAP[abbr];
-      if (mapped && ind.value !== null && ind.value !== undefined) {
+      const name = (ind.name || '');
+      const mapped = ABBR_MAP[abbr] || ABBR_MAP[ind.abbr] || Object.keys(NAME_MAP).find(k => name.includes(k) && NAME_MAP[k]) && NAME_MAP[Object.keys(NAME_MAP).find(k => name.includes(k))];
+      if (mapped && ind.value !== null && ind.value !== undefined && !document.getElementById('f-' + mapped).value) {
         document.getElementById('f-' + mapped).value = ind.value;
         filled++;
       }
