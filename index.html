@@ -523,6 +523,13 @@ async function ocrExtract() {
   const ocrPrompt = `这是一张血常规检查报告图片。请完成两件事：
 1. 识别报告上的检查日期（如"2026-06-22"格式）
 2. 提取报告中的【全部】检验指标，报告上有多少就提取多少。
+
+重要区分规则：
+- 带"#"或"数""绝对值""计数"的是绝对值（单位通常是×10^9/L），如：中性粒细胞数、淋巴细胞数、NEUT#、LY#
+- 带"%""百分比""比率"的是百分比（单位是%），如：中性粒细胞百分比、淋巴细胞百分比、NEUT%、LY%
+- 绝对值和百分比是不同指标，必须分开，abbr用#和%区分（如LY#和LY%）
+- value必须严格读取报告上"结果"或"检测值"那一列的数字，不要读成参考范围的数字
+
 严格按以下JSON格式返回，不要其他文字：
 {"date":"检查日期YYYY-MM-DD或null","indicators":[{"abbr":"英文缩写","name":"中文名","value":数值,"unit":"单位","ref_low":下限或null,"ref_high":上限或null}]}`;
 
@@ -567,7 +574,10 @@ async function ocrExtract() {
     for (const ind of allIndicators) {
       const abbr = (ind.abbr || '').toUpperCase();
       const name = (ind.name || '');
-      const mapped = ABBR_MAP[abbr] || ABBR_MAP[ind.abbr] || Object.keys(NAME_MAP).find(k => name.includes(k) && NAME_MAP[k]) && NAME_MAP[Object.keys(NAME_MAP).find(k => name.includes(k))];
+      const unit = (ind.unit || '');
+      const isPct = abbr.includes('%') || name.includes('百分比') || name.includes('比率') || unit === '%';
+      if (isPct) continue;
+      const mapped = ABBR_MAP[abbr] || ABBR_MAP[ind.abbr] || (function() { const k = Object.keys(NAME_MAP).find(k => name.includes(k)); return k ? NAME_MAP[k] : null; })();
       if (mapped && ind.value !== null && ind.value !== undefined && !document.getElementById('f-' + mapped).value) {
         document.getElementById('f-' + mapped).value = ind.value;
         filled++;
