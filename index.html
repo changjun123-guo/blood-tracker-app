@@ -815,6 +815,12 @@ async function exportData() {
 const CONFIG_SB = 'https://rvlynkqeossfbkqrjalc.supabase.co';
 const CONFIG_KEY = 'sb_publishable_KgcvcYTsQ42EXRTYSD1-kA_cEoP9HkO';
 
+async function hashPasscode(code) {
+  const data = new TextEncoder().encode(code);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 async function verifyPasscode() {
   const code = document.getElementById('s-passcode').value.trim();
   const errEl = document.getElementById('setup-error');
@@ -822,7 +828,8 @@ async function verifyPasscode() {
 
   errEl.style.display = 'none';
   try {
-    const resp = await fetch(CONFIG_SB + '/rest/v1/app_config?passcode=eq.' + encodeURIComponent(code), {
+    const hashed = await hashPasscode(code);
+    const resp = await fetch(CONFIG_SB + '/rest/v1/app_config?passcode=eq.' + hashed, {
       headers: { 'apikey': CONFIG_KEY, 'Authorization': 'Bearer ' + CONFIG_KEY },
     });
     const data = await resp.json();
