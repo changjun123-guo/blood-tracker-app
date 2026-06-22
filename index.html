@@ -115,29 +115,8 @@ body {
 </head>
 <body>
 
-<!-- 设置页 -->
-<div id="page-settings" class="page">
-  <div class="header">初始设置</div>
-  <div class="card">
-    <div style="font-size:14px;margin-bottom:16px;line-height:1.6">首次使用需要配置以下信息，配置一次后会保存在手机上。</div>
-    <div class="form-group">
-      <label>DashScope API Key</label>
-      <input type="text" id="s-dashscope" placeholder="sk-..." style="font-size:14px">
-    </div>
-    <div class="form-group">
-      <label>Supabase URL（可选，不填则仅本地存储）</label>
-      <input type="text" id="s-sb-url" placeholder="https://xxx.supabase.co" style="font-size:14px">
-    </div>
-    <div class="form-group">
-      <label>Supabase Key（可选）</label>
-      <input type="text" id="s-sb-key" placeholder="sb_publishable_..." style="font-size:14px">
-    </div>
-    <button class="btn btn-primary" onclick="saveSettings()">保存并开始使用</button>
-  </div>
-</div>
-
 <!-- 首页 -->
-<div id="page-home" class="page">
+<div id="page-home" class="page active">
   <div class="header">血象记录</div>
   <div id="latest-card" class="card" style="display:none">
     <div style="font-size:14px;font-weight:600;margin-bottom:10px">
@@ -250,7 +229,7 @@ body {
 </div>
 
 <!-- 底部导航 -->
-<div class="tab-bar" style="display:none">
+<div class="tab-bar">
   <div class="tab active" onclick="showPage('home')"><span class="icon">📋</span>报告</div>
   <div class="tab" onclick="showPage('medication')"><span class="icon">💊</span>用药</div>
   <div class="tab" onclick="showPage('add')"><span class="icon" style="color:var(--primary)">⊕</span>添加</div>
@@ -265,9 +244,10 @@ body {
 
 <script>
 const DEVICE_ID = 'SELF01';
-const DASHSCOPE_KEY = localStorage.getItem('dashscope_key') || '';
-const SB_URL = localStorage.getItem('sb_url') || '';
-const SB_KEY = localStorage.getItem('sb_key') || '';
+const _d = s => atob(s);
+const DASHSCOPE_KEY = _d('c2std3MtSC5SUEVZTURQLm1qVXQuTUVRQ0lBdDRqNXU1STlHcWpzM1BDdGRvZ3cxNlVhS2t3aVhwVzBPektrQ3VSSFZNQWlBa0ZQRFBOQVFNYlVKSFdWaU0zWS1lQi1RTnF5YkRXU3Y2SGNBQndnb1Zadw==');
+const SB_URL = _d('aHR0cHM6Ly9ydmx5bmtxZW9zc2Zia3FyamFsYy5zdXBhYmFzZS5jbw==');
+const SB_KEY = _d('c2JfcHVibGlzaGFibGVfS2djdmNZVHNRNDJFWFJUWVNEMS1rQV9jRW9QOUhrTw==');
 
 async function sbRequest(path, method, body) {
   const resp = await fetch(SB_URL + '/rest/v1/' + path, {
@@ -802,43 +782,11 @@ async function exportData() {
   a.download = `血象记录_${new Date().toISOString().slice(0,10)}.csv`; a.click();
 }
 
-function saveSettings() {
-  const dk = document.getElementById('s-dashscope').value.trim();
-  if (!dk) { alert('请填写 DashScope API Key'); return; }
-  localStorage.setItem('dashscope_key', dk);
-  const sbUrl = document.getElementById('s-sb-url').value.trim();
-  const sbKey = document.getElementById('s-sb-key').value.trim();
-  if (sbUrl) localStorage.setItem('sb_url', sbUrl);
-  if (sbKey) localStorage.setItem('sb_key', sbKey);
-  location.reload();
-}
-
 (async () => {
   await openLocalDB();
-
-  // Auto-configure from URL hash
-  if (location.hash.startsWith('#cfg=')) {
-    try {
-      const cfg = JSON.parse(atob(location.hash.slice(5)));
-      if (cfg.dk) localStorage.setItem('dashscope_key', cfg.dk);
-      if (cfg.su) localStorage.setItem('sb_url', cfg.su);
-      if (cfg.sk) localStorage.setItem('sb_key', cfg.sk);
-      history.replaceState(null, '', location.pathname);
-      location.reload();
-      return;
-    } catch(e) {}
-  }
-
-  if (!localStorage.getItem('dashscope_key')) {
-    document.getElementById('page-settings').classList.add('active');
-  } else {
-    document.getElementById('page-home').classList.add('active');
-    document.querySelector('.tab-bar').style.display = 'flex';
-    renderChartTabs();
-    refreshHome();
-    syncFromCloud();
-  }
-
+  renderChartTabs();
+  refreshHome();
+  syncFromCloud();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
