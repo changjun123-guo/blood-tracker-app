@@ -493,53 +493,66 @@ async function ocrExtract() {
   if (currentImages.length === 0) return;
   const btn = document.getElementById('btn-ocr');
   const statusEl = document.getElementById('ocr-status');
-  btn.disabled = true; btn.textContent = '正在识别中...';
+  btn.disabled = true;
   statusEl.style.display = 'block'; statusEl.style.color = 'var(--text2)';
-  statusEl.textContent = '正在通过AI识别血常规报告，请稍候...';
 
-  try {
-    const ocrPrompt = `这是一张血常规检查报告图片。请完成两件事：
+  const ocrPrompt = `这是一张血常规检查报告图片。请完成两件事：
 1. 识别报告上的检查日期（如"2026-06-22"格式）
 2. 提取报告中的【全部】检验指标，报告上有多少就提取多少。
 严格按以下JSON格式返回，不要其他文字：
 {"date":"检查日期YYYY-MM-DD或null","indicators":[{"abbr":"英文缩写","name":"中文名","value":数值,"unit":"单位","ref_low":下限或null,"ref_high":上限或null}]}`;
 
-    const data = await callDashscope([{
-      role: 'user',
-      content: [
-        { type: 'image_url', image_url: { url: currentImages[0] } },
-        { type: 'text', text: ocrPrompt },
-      ],
-    }], 'qwen-vl-plus');
+  let allIndicators = [];
+  let detectedDate = null;
+  let successCount = 0;
 
-    const content = data.choices?.[0]?.message?.content || '';
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const v = JSON.parse(jsonMatch[0]);
-      if (v.date) document.getElementById('f-date').value = v.date;
-      if (v.indicators && Array.isArray(v.indicators)) {
-        currentAllIndicators = v.indicators;
-        let filled = 0;
-        for (const ind of v.indicators) {
-          const abbr = (ind.abbr || '').toUpperCase();
-          const mapped = ABBR_MAP[abbr];
-          if (mapped && ind.value !== null && ind.value !== undefined) {
-            document.getElementById('f-' + mapped).value = ind.value;
-            filled++;
+  for (let i = 0; i < currentImages.length; i++) {
+    statusEl.textContent = `正在识别第 ${i + 1}/${currentImages.length} 张报告...`;
+    btn.textContent = `识别中 ${i + 1}/${currentImages.length}`;
+    try {
+      const data = await callDashscope([{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: currentImages[i] } },
+          { type: 'text', text: ocrPrompt },
+        ],
+      }], 'qwen-vl-plus');
+
+      const content = data.choices?.[0]?.message?.content || '';
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const v = JSON.parse(jsonMatch[0]);
+        if (v.date && !detectedDate) detectedDate = v.date;
+        if (v.indicators && Array.isArray(v.indicators)) {
+          for (const ind of v.indicators) {
+            if (!allIndicators.some(a => a.abbr === ind.abbr && a.name === ind.name)) {
+              allIndicators.push(ind);
+            }
           }
+          successCount++;
         }
-        renderOcrExtraTable(v.indicators);
-        statusEl.textContent = `已识别 ${v.indicators.length} 项指标，${filled} 项已填入核心字段，请核对后保存`;
-        statusEl.style.color = '#5cb85c';
-      } else {
-        statusEl.textContent = '未能提取指标'; statusEl.style.color = '#d9534f';
       }
-    } else {
-      statusEl.textContent = '识别失败: ' + content.substring(0, 80);
-      statusEl.style.color = '#d9534f';
+    } catch (e) { console.warn('OCR image ' + i + ' failed:', e); }
+  }
+
+  if (detectedDate) document.getElementById('f-date').value = detectedDate;
+
+  if (allIndicators.length > 0) {
+    currentAllIndicators = allIndicators;
+    let filled = 0;
+    for (const ind of allIndicators) {
+      const abbr = (ind.abbr || '').toUpperCase();
+      const mapped = ABBR_MAP[abbr];
+      if (mapped && ind.value !== null && ind.value !== undefined) {
+        document.getElementById('f-' + mapped).value = ind.value;
+        filled++;
+      }
     }
-  } catch (e) {
-    statusEl.textContent = '识别出错: ' + e.message;
+    renderOcrExtraTable(allIndicators);
+    statusEl.textContent = `${successCount}/${currentImages.length} 张识别成功，共 ${allIndicators.length} 项指标，${filled} 项已填入核心字段`;
+    statusEl.style.color = '#5cb85c';
+  } else {
+    statusEl.textContent = '全部识别失败';
     statusEl.style.color = '#d9534f';
   }
   btn.disabled = false; btn.textContent = 'AI 识别报告';
