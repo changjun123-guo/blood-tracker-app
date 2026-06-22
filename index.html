@@ -119,13 +119,11 @@ body {
 <div id="page-setup" class="page">
   <div class="setup-page">
     <div class="setup-logo">血象记录</div>
-    <div class="setup-sub">首次使用，请配置以下信息</div>
+    <div class="setup-sub">请输入口令开始使用</div>
     <div class="setup-card">
-      <div class="form-group"><label>AI Key（DashScope）</label><input type="text" id="s-dk" placeholder="sk-..." style="font-size:14px"></div>
-      <div class="form-group"><label>数据库地址（选填）</label><input type="text" id="s-su" placeholder="https://xxx.supabase.co" style="font-size:14px"></div>
-      <div class="form-group"><label>数据库密钥（选填）</label><input type="text" id="s-sk" placeholder="sb_publishable_..." style="font-size:14px"></div>
-      <div class="ref-note" style="margin-bottom:12px">AI Key 用于报告识别和语音输入；数据库用于云端同步，不填则仅本地存储。配置保存在手机上，只需填一次。</div>
-      <button class="btn btn-primary" onclick="saveSetup()">保存并开始</button>
+      <div class="form-group"><label>口令</label><input type="text" id="s-passcode" placeholder="请输入口令" style="font-size:18px;text-align:center"></div>
+      <div id="setup-error" style="font-size:13px;color:#d9534f;margin-bottom:8px;display:none"></div>
+      <button class="btn btn-primary" onclick="verifyPasscode()">进入</button>
     </div>
   </div>
 </div>
@@ -814,15 +812,42 @@ async function exportData() {
   a.download = `血象记录_${new Date().toISOString().slice(0,10)}.csv`; a.click();
 }
 
-function saveSetup() {
-  const dk = document.getElementById('s-dk').value.trim();
-  if (!dk) { alert('请填写 AI Key'); return; }
-  localStorage.setItem('dk', dk);
-  const su = document.getElementById('s-su').value.trim();
-  const sk = document.getElementById('s-sk').value.trim();
-  if (su) localStorage.setItem('su', su);
-  if (sk) localStorage.setItem('sk', sk);
-  location.reload();
+const CONFIG_SB = 'https://rvlynkqeossfbkqrjalc.supabase.co';
+const CONFIG_KEY = 'sb_publishable_KgcvcYTsQ42EXRTYSD1-kA_cEoP9HkO';
+
+async function verifyPasscode() {
+  const code = document.getElementById('s-passcode').value.trim();
+  const errEl = document.getElementById('setup-error');
+  if (!code) { errEl.textContent = '请输入口令'; errEl.style.display = 'block'; return; }
+
+  errEl.style.display = 'none';
+  try {
+    const resp = await fetch(CONFIG_SB + '/rest/v1/app_config?passcode=eq.' + encodeURIComponent(code), {
+      headers: { 'apikey': CONFIG_KEY, 'Authorization': 'Bearer ' + CONFIG_KEY },
+    });
+    const data = await resp.json();
+    if (!data || data.length === 0) {
+      errEl.textContent = '口令错误'; errEl.style.display = 'block'; return;
+    }
+    const cfg = data[0].config;
+    localStorage.setItem('dk', cfg.dk);
+    localStorage.setItem('su', cfg.su);
+    localStorage.setItem('sk', cfg.sk);
+    location.reload();
+  } catch (e) {
+    errEl.textContent = '网络异常: ' + e.message; errEl.style.display = 'block';
+  }
+}
+
+function enterApp() {
+  DASHSCOPE_KEY = localStorage.getItem('dk');
+  SB_URL = localStorage.getItem('su') || '';
+  SB_KEY = localStorage.getItem('sk') || '';
+  document.getElementById('page-home').classList.add('active');
+  document.querySelector('.tab-bar').style.display = 'flex';
+  renderChartTabs();
+  refreshHome();
+  syncFromCloud();
 }
 
 (async () => {
@@ -830,14 +855,7 @@ function saveSetup() {
   if (!localStorage.getItem('dk')) {
     document.getElementById('page-setup').classList.add('active');
   } else {
-    DASHSCOPE_KEY = localStorage.getItem('dk');
-    SB_URL = localStorage.getItem('su') || '';
-    SB_KEY = localStorage.getItem('sk') || '';
-    document.getElementById('page-home').classList.add('active');
-    document.querySelector('.tab-bar').style.display = 'flex';
-    renderChartTabs();
-    refreshHome();
-    syncFromCloud();
+    enterApp();
   }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
