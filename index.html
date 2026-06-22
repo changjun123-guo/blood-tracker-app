@@ -395,8 +395,10 @@ function compressImage(file, maxW = 600) {
   });
 }
 
-async function addImage(e) { const f = e.target.files[0]; if (!f) return; currentImages.push(await compressImage(f)); renderImagePreviews(); e.target.value = ''; ocrExtract(); }
-async function addImages(e) { for (const f of Array.from(e.target.files)) currentImages.push(await compressImage(f)); renderImagePreviews(); e.target.value = ''; ocrExtract(); }
+let ocrTimer = null;
+async function addImage(e) { const f = e.target.files[0]; if (!f) return; currentImages.push(await compressImage(f)); renderImagePreviews(); e.target.value = ''; scheduleOcr(); }
+async function addImages(e) { for (const f of Array.from(e.target.files)) currentImages.push(await compressImage(f)); renderImagePreviews(); e.target.value = ''; scheduleOcr(); }
+function scheduleOcr() { if (ocrTimer) clearTimeout(ocrTimer); ocrTimer = setTimeout(() => { ocrTimer = null; ocrExtract(); }, 1500); }
 function removeImage(idx) { currentImages.splice(idx, 1); renderImagePreviews(); }
 function renderImagePreviews() {
   const area = document.getElementById('image-area');
@@ -489,8 +491,10 @@ async function startVoice(field) {
   }
 }
 
+let ocrRunning = false;
 async function ocrExtract() {
-  if (currentImages.length === 0) return;
+  if (currentImages.length === 0 || ocrRunning) return;
+  ocrRunning = true;
   const btn = document.getElementById('btn-ocr');
   const statusEl = document.getElementById('ocr-status');
   btn.disabled = true;
@@ -556,6 +560,7 @@ async function ocrExtract() {
     statusEl.style.color = '#d9534f';
   }
   btn.disabled = false; btn.textContent = 'AI 识别报告';
+  ocrRunning = false;
 }
 
 function renderOcrExtraTable(indicators) {
