@@ -816,6 +816,19 @@ function saveSettings() {
 (async () => {
   await openLocalDB();
 
+  // Auto-configure from URL hash
+  if (location.hash.startsWith('#cfg=')) {
+    try {
+      const cfg = JSON.parse(atob(location.hash.slice(5)));
+      if (cfg.dk) localStorage.setItem('dashscope_key', cfg.dk);
+      if (cfg.su) localStorage.setItem('sb_url', cfg.su);
+      if (cfg.sk) localStorage.setItem('sb_key', cfg.sk);
+      history.replaceState(null, '', location.pathname);
+      location.reload();
+      return;
+    } catch(e) {}
+  }
+
   if (!localStorage.getItem('dashscope_key')) {
     document.getElementById('page-settings').classList.add('active');
   } else {
