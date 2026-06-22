@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="血象记录">
+<link rel="manifest" href="manifest.json">
+<title>血象记录</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --primary: #e8866a;
+  --primary-light: #f4a98c;
+  --danger: #d9534f;
+  --warning: #f0ad4e;
+  --success: #5cb85c;
+  --bg: #fdf6f0;
+  --card: #fffaf6;
+  --text: #5a4a42;
+  --text2: #a89890;
+  --border: #f0e0d6;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+body {
+  font-family: -apple-system, "HarmonyOS Sans", "PingFang SC", sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; padding-bottom: calc(70px + var(--safe-bottom));
+}
+.page { display: none; }
+.page.active { display: block; }
+.header {
+  position: sticky; top: 0; z-index: 10;
+  background: linear-gradient(135deg, #e8866a, #f4a98c);
+  color: #fff; padding: 14px 16px; font-size: 17px; font-weight: 600;
+  display: flex; align-items: center; gap: 10px;
+}
+.header .back { font-size: 22px; cursor: pointer; line-height: 1; }
+.tab-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--card); border-top: 1px solid var(--border);
+  display: flex; padding-bottom: var(--safe-bottom); z-index: 100;
+}
+.tab-bar .tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px 0; font-size: 11px; color: var(--text2); cursor: pointer; gap: 2px; }
+.tab-bar .tab.active { color: var(--primary); }
+.tab-bar .tab .icon { font-size: 20px; height: 24px; line-height: 24px; }
+.card { background: var(--card); margin: 12px; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.metric-item { background: var(--bg); border-radius: 10px; padding: 12px; text-align: center; }
+.metric-item .label { font-size: 12px; color: var(--text2); }
+.metric-item .value { font-size: 22px; font-weight: 700; margin: 4px 0; }
+.metric-item .range { font-size: 11px; color: var(--text2); }
+.metric-item.low .value { color: #d9534f; }
+.metric-item.high .value { color: #e8866a; }
+.metric-item.normal .value { color: #5cb85c; }
+.record-item { display: flex; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+.record-item:last-child { border-bottom: none; }
+.record-item .date { font-size: 14px; font-weight: 600; min-width: 90px; }
+.record-item .summary { flex: 1; font-size: 12px; color: var(--text2); display: flex; gap: 8px; flex-wrap: wrap; }
+.record-item .summary .tag { background: var(--bg); padding: 2px 6px; border-radius: 4px; }
+.record-item .summary .tag.warn { background: #fde8d8; color: #c0614a; }
+.record-item .arrow { color: var(--text2); font-size: 16px; }
+.record-item .has-img { font-size: 16px; margin-right: 6px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 6px; }
+.form-group .unit { font-size: 12px; color: var(--text2); }
+.form-group input[type="number"], .form-group input[type="date"], .form-group input[type="text"], .form-group textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 16px; background: var(--bg); -webkit-appearance: none;
+}
+.form-group textarea { height: 60px; resize: none; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.image-upload { display: flex; gap: 10px; flex-wrap: wrap; }
+.image-upload .upload-btn { width: 80px; height: 80px; border: 2px dashed var(--border); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; font-size: 11px; color: var(--text2); gap: 2px; flex-shrink: 0; }
+.upload-btn .icon { font-size: 24px; }
+.image-upload .preview { width: 80px; height: 80px; border-radius: 10px; object-fit: cover; }
+.image-upload .img-wrap { position: relative; flex-shrink: 0; }
+.image-upload .img-wrap .del { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; background: var(--danger); color: #fff; border: none; border-radius: 50%; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.btn { width: 100%; padding: 13px; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 10px; }
+.btn-primary { background: linear-gradient(135deg, #e8866a, #f4a98c); color: #fff; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-outline { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+.btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+.chart-wrap { position: relative; height: 220px; margin-top: 10px; }
+.chart-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.chart-tab { padding: 4px 10px; border-radius: 14px; font-size: 12px; cursor: pointer; background: var(--bg); color: var(--text2); border: none; }
+.chart-tab.active { background: var(--primary); color: #fff; }
+.viewer { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 200; align-items: center; justify-content: center; }
+.viewer.show { display: flex; }
+.viewer img { max-width: 95%; max-height: 90vh; object-fit: contain; }
+.viewer .close { position: absolute; top: 16px; right: 16px; color: #fff; font-size: 28px; cursor: pointer; background: none; border: none; }
+.empty { text-align: center; padding: 40px 20px; color: var(--text2); }
+.empty .icon { font-size: 48px; margin-bottom: 12px; }
+.ref-note { font-size: 11px; color: var(--text2); margin-top: 8px; line-height: 1.6; }
+.detail-images { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.detail-images img { width: calc(50% - 4px); border-radius: 8px; cursor: pointer; }
+.voice-btn {
+  background: none; border: 1px solid var(--border); border-radius: 14px;
+  padding: 3px 10px; font-size: 12px; color: var(--primary); cursor: pointer;
+}
+.voice-btn.recording { background: var(--danger); color: #fff; border-color: var(--danger); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+.voice-status { font-size: 12px; color: var(--text2); margin-top: 4px; min-height: 16px; }
+.ind-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ind-table th { text-align: left; padding: 8px 6px; border-bottom: 2px solid var(--border); color: var(--text2); font-weight: 500; font-size: 12px; }
+.ind-table td { padding: 7px 6px; border-bottom: 1px solid var(--border); }
+.ind-table tr:last-child td { border-bottom: none; }
+.ind-table .val { font-weight: 600; }
+.ind-table .low { color: #d9534f; }
+.ind-table .high { color: #e8866a; }
+.ind-table .normal { color: #5cb85c; }
+.ind-table .ref { color: var(--text2); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<!-- 设置页 -->
+<div id="page-settings" class="page">
+  <div class="header">初始设置</div>
+  <div class="card">
+    <div style="font-size:14px;margin-bottom:16px;line-height:1.6">首次使用需要配置以下信息，配置一次后会保存在手机上。</div>
+    <div class="form-group">
+      <label>DashScope API Key</label>
+      <input type="text" id="s-dashscope" placeholder="sk-..." style="font-size:14px">
+    </div>
+    <div class="form-group">
+      <label>Supabase URL（可选，不填则仅本地存储）</label>
+      <input type="text" id="s-sb-url" placeholder="https://xxx.supabase.co" style="font-size:14px">
+    </div>
+    <div class="form-group">
+      <label>Supabase Key（可选）</label>
+      <input type="text" id="s-sb-key" placeholder="sb_publishable_..." style="font-size:14px">
+    </div>
+    <button class="btn btn-primary" onclick="saveSettings()">保存并开始使用</button>
+  </div>
+</div>
+
+<!-- 首页 -->
+<div id="page-home" class="page">
+  <div class="header">血象记录</div>
+  <div id="latest-card" class="card" style="display:none">
+    <div style="font-size:14px;font-weight:600;margin-bottom:10px">
+      最新指标 <span id="latest-date" style="font-weight:400;color:var(--text2);font-size:12px"></span>
+    </div>
+    <div id="latest-metrics" class="metrics-grid"></div>
+    <div class="ref-note">维持期参考：WBC 2.0-4.0 · ANC 0.75-1.5 · PLT >75 · HGB >90</div>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:14px;font-weight:600">趋势图</span>
+      <div id="chart-tabs" class="chart-tabs"></div>
+    </div>
+    <div id="chart-empty" class="empty" style="display:none"><div class="icon">📊</div><div>添加两条以上记录后显示趋势</div></div>
+    <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
+  </div>
+  <div class="card">
+    <div style="font-size:14px;font-weight:600;margin-bottom:8px">历史记录</div>
+    <div id="record-list"></div>
+    <div id="list-empty" class="empty"><div class="icon">📋</div><div>暂无记录，点击下方「+」添加</div></div>
+  </div>
+</div>
+
+<!-- 录入页 -->
+<div id="page-add" class="page">
+  <div class="header"><span class="back" onclick="showPage('home')">‹</span><span id="add-title">添加记录</span></div>
+  <div class="card">
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px">上传检查报告（拍照或截图）</div>
+    <div id="image-area" class="image-upload">
+      <label class="upload-btn"><span class="icon">📷</span><span>拍照</span><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addImage(event)"></label>
+      <label class="upload-btn"><span class="icon">🖼️</span><span>相册/截图</span><input type="file" accept="image/*" multiple style="display:none" onchange="addImages(event)"></label>
+    </div>
+    <button class="btn btn-primary" onclick="ocrExtract()" id="btn-ocr" style="display:none;margin-top:10px">AI 识别报告</button>
+    <div id="ocr-status" style="font-size:12px;color:var(--text2);margin-top:6px;display:none"></div>
+  </div>
+  <div class="card">
+    <div class="form-group">
+      <label>检查日期</label>
+      <input type="date" id="f-date">
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px">核心指标（手动填写或AI识别自动填入）</div>
+    <div class="form-row">
+      <div class="form-group"><label>WBC 白细胞 <span class="unit">×10⁹/L</span></label><input type="number" id="f-wbc" step="0.01" placeholder="如 3.5" inputmode="decimal"></div>
+      <div class="form-group"><label>ANC 中性粒细胞 <span class="unit">×10⁹/L</span></label><input type="number" id="f-anc" step="0.01" placeholder="如 1.2" inputmode="decimal"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>HGB 血红蛋白 <span class="unit">g/L</span></label><input type="number" id="f-hgb" step="1" placeholder="如 110" inputmode="decimal"></div>
+      <div class="form-group"><label>PLT 血小板 <span class="unit">×10⁹/L</span></label><input type="number" id="f-plt" step="1" placeholder="如 150" inputmode="decimal"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>LYMPH 淋巴细胞 <span class="unit">×10⁹/L</span></label><input type="number" id="f-lymph" step="0.01" placeholder="如 2.0" inputmode="decimal"></div>
+      <div class="form-group"><label>RBC 红细胞 <span class="unit">×10¹²/L</span></label><input type="number" id="f-rbc" step="0.01" placeholder="如 4.0" inputmode="decimal"></div>
+    </div>
+    <div id="ocr-extra-section" style="display:none">
+      <div style="font-size:13px;color:var(--text2);margin:12px 0 8px">AI识别的全部指标</div>
+      <table class="ind-table" id="ocr-extra-table"></table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="form-group">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <label>用药指导</label>
+        <button class="voice-btn" onclick="startVoice('medication')" id="voice-medication">🎤 语音输入</button>
+      </div>
+      <textarea id="f-medication" placeholder="医生给的用药方案，如：6-MP 25mg 每晚一次、MTX 10mg 每周一次"></textarea>
+      <div id="voice-status-medication" class="voice-status"></div>
+    </div>
+    <div class="form-group">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <label>备注</label>
+        <button class="voice-btn" onclick="startVoice('notes')" id="voice-notes">🎤 语音输入</button>
+      </div>
+      <textarea id="f-notes" placeholder="身体状况、不良反应等"></textarea>
+      <div id="voice-status-notes" class="voice-status"></div>
+    </div>
+    <button class="btn btn-primary" onclick="saveRecord()">保存记录</button>
+  </div>
+</div>
+
+<!-- 详情页 -->
+<div id="page-detail" class="page">
+  <div class="header"><span class="back" onclick="showPage('home')">‹</span><span>记录详情</span></div>
+  <div class="card">
+    <div id="detail-date" style="font-size:16px;font-weight:600;margin-bottom:12px"></div>
+    <table class="ind-table" id="detail-indicators"></table>
+  </div>
+  <div id="detail-images-card" class="card" style="display:none">
+    <div style="font-size:14px;font-weight:600;margin-bottom:8px">检查报告</div>
+    <div id="detail-images" class="detail-images"></div>
+  </div>
+  <div id="detail-medication-card" class="card" style="display:none">
+    <div style="font-size:14px;font-weight:600;margin-bottom:8px">用药指导</div>
+    <div id="detail-medication" style="font-size:14px;line-height:1.6;white-space:pre-wrap"></div>
+  </div>
+  <div id="detail-notes-card" class="card" style="display:none">
+    <div style="font-size:14px;font-weight:600;margin-bottom:8px">备注</div>
+    <div id="detail-notes" style="font-size:14px;line-height:1.6;white-space:pre-wrap"></div>
+  </div>
+  <div class="card">
+    <button class="btn btn-outline" onclick="editRecord()">编辑</button>
+    <button class="btn btn-danger" onclick="deleteRecord()" style="margin-top:8px">删除记录</button>
+  </div>
+</div>
+
+<!-- 用药历史页 -->
+<div id="page-medication" class="page">
+  <div class="header">用药指导记录</div>
+  <div id="med-list"></div>
+  <div id="med-empty" class="empty" style="margin:12px"><div class="icon">💊</div><div>暂无用药记录</div></div>
+</div>
+
+<!-- 底部导航 -->
+<div class="tab-bar" style="display:none">
+  <div class="tab active" onclick="showPage('home')"><span class="icon">📋</span>报告</div>
+  <div class="tab" onclick="showPage('medication')"><span class="icon">💊</span>用药</div>
+  <div class="tab" onclick="showPage('add')"><span class="icon" style="color:var(--primary)">⊕</span>添加</div>
+  <div class="tab" onclick="exportData()"><span class="icon">📤</span>导出</div>
+</div>
+
+<!-- 图片查看器 -->
+<div id="viewer" class="viewer" onclick="this.classList.remove('show')">
+  <button class="close">✕</button>
+  <img id="viewer-img" src="">
+</div>
+
+<script>
+const DEVICE_ID = 'SELF01';
+const DASHSCOPE_KEY = localStorage.getItem('dashscope_key') || '';
+const SB_URL = localStorage.getItem('sb_url') || '';
+const SB_KEY = localStorage.getItem('sb_key') || '';
+
+async function sbRequest(path, method, body) {
+  const resp = await fetch(SB_URL + '/rest/v1/' + path, {
+    method, headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', 'Prefer': method === 'POST' ? 'resolution=merge-duplicates' : '' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return method === 'GET' ? resp.json() : resp.ok;
+}
+
+async function callDashscope(messages, model) {
+  const resp = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + DASHSCOPE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: model || 'qwen-turbo', messages }),
+  });
+  return resp.json();
+}
+const DB_NAME = 'BloodTrackerDB';
+const DB_VERSION = 2;
+const STORE = 'records';
+
+const KEY_INDICATORS = [
+  { key: 'wbc',   name: '白细胞',     abbr: 'WBC',   unit: '×10⁹/L',  low: 2.0, high: 4.0 },
+  { key: 'anc',   name: '中性粒细胞', abbr: 'ANC',   unit: '×10⁹/L',  low: 0.75, high: 1.5 },
+  { key: 'hgb',   name: '血红蛋白',   abbr: 'HGB',   unit: 'g/L',      low: 90,  high: 160 },
+  { key: 'plt',   name: '血小板',     abbr: 'PLT',   unit: '×10⁹/L',  low: 75,  high: 350 },
+  { key: 'lymph', name: '淋巴细胞',   abbr: 'LYMPH', unit: '×10⁹/L',  low: 0.8, high: 4.0 },
+  { key: 'rbc',   name: '红细胞',     abbr: 'RBC',   unit: '×10¹²/L', low: 3.5, high: 5.5 },
+];
+
+const ABBR_MAP = {
+  'WBC': 'wbc', 'RBC': 'rbc', 'HGB': 'hgb', 'HB': 'hgb', 'PLT': 'plt',
+  'NEUT#': 'anc', 'ANC': 'anc', 'NEU#': 'anc', 'NEUT': 'anc',
+  'LY#': 'lymph', 'LYMPH#': 'lymph', 'LYMPH': 'lymph', 'LYM#': 'lymph',
+};
+
+let localDB, currentImages = [], currentAllIndicators = [], editingId = null, trendChart = null, activeChartKey = 'wbc';
+let isOnline = navigator.onLine;
+window.addEventListener('online', () => { isOnline = true; syncToCloud(); });
+window.addEventListener('offline', () => { isOnline = false; });
+
+function openLocalDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
+    };
+    req.onsuccess = e => { localDB = e.target.result; resolve(); };
+    req.onerror = e => reject(e);
+  });
+}
+function localGetAll() {
+  return new Promise((resolve, reject) => {
+    const tx = localDB.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result.sort((a, b) => b.date.localeCompare(a.date)));
+    req.onerror = e => reject(e);
+  });
+}
+function localPut(r) {
+  return new Promise((resolve, reject) => {
+    const tx = localDB.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(r);
+    tx.oncomplete = () => resolve();
+    tx.onerror = e => reject(e);
+  });
+}
+function localDelete(id) {
+  return new Promise((resolve, reject) => {
+    const tx = localDB.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = e => reject(e);
+  });
+}
+
+async function syncToCloud() {
+  if (!isOnline) return;
+  try {
+    const locals = await localGetAll();
+    for (const r of locals) {
+      await sbRequest('blood_records', 'POST', {
+        id: r.id, family_id: DEVICE_ID, date: r.date, wbc: r.wbc, anc: r.anc, hgb: r.hgb, plt: r.plt,
+        lymph: r.lymph, rbc: r.rbc, medication: r.medication || '', notes: r.notes || '',
+        images: r.images || [], all_indicators: r.all_indicators || [],
+      });
+    }
+  } catch (e) { console.warn('sync failed', e); }
+}
+async function syncFromCloud() {
+  if (!isOnline) return;
+  try {
+    const data = await sbRequest('blood_records?family_id=eq.' + DEVICE_ID + '&order=date.desc', 'GET');
+    if (Array.isArray(data)) {
+      for (const row of data) {
+        await localPut({ id: row.id, date: row.date, wbc: row.wbc, anc: row.anc, hgb: row.hgb, plt: row.plt,
+          lymph: row.lymph, rbc: row.rbc, medication: row.medication || '', notes: row.notes || '', images: row.images || [],
+          all_indicators: row.all_indicators || [] });
+      }
+    }
+    refreshHome();
+  } catch (e) { console.warn('sync failed', e); }
+}
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.tab-bar .tab').forEach((t, i) => t.classList.toggle('active', (name === 'home' && i === 0) || (name === 'medication' && i === 1) || (name === 'add' && i === 2)));
+  if (name === 'home') refreshHome();
+  if (name === 'add' && !editingId) resetForm();
+  if (name === 'medication') refreshMedication();
+}
+
+function resetForm() {
+  editingId = null;
+  document.getElementById('add-title').textContent = '添加记录';
+  document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+  ['wbc','anc','hgb','plt','lymph','rbc'].forEach(k => document.getElementById('f-' + k).value = '');
+  document.getElementById('f-medication').value = '';
+  document.getElementById('f-notes').value = '';
+  currentImages = [];
+  currentAllIndicators = [];
+  renderImagePreviews();
+  document.getElementById('ocr-extra-section').style.display = 'none';
+  document.getElementById('ocr-status').style.display = 'none';
+}
+
+function compressImage(file, maxW = 600) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = h * maxW / w; w = maxW; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.4));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addImage(e) { const f = e.target.files[0]; if (!f) return; currentImages.push(await compressImage(f)); renderImagePreviews(); e.target.value = ''; ocrExtract(); }
+async function addImages(e) { for (const f of Array.from(e.target.files)) currentImages.push(await compressImage(f)); renderImagePreviews(); e.target.value = ''; ocrExtract(); }
+function removeImage(idx) { currentImages.splice(idx, 1); renderImagePreviews(); }
+function renderImagePreviews() {
+  const area = document.getElementById('image-area');
+  area.querySelectorAll('.img-wrap').forEach(el => el.remove());
+  const btns = area.querySelectorAll('.upload-btn');
+  currentImages.forEach((src, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'img-wrap';
+    wrap.innerHTML = `<img class="preview" src="${src}" onclick="viewImage(this.src)"><button class="del" onclick="event.stopPropagation();removeImage(${i})">✕</button>`;
+    area.insertBefore(wrap, btns[0]);
+  });
+  document.getElementById('btn-ocr').style.display = currentImages.length > 0 ? 'block' : 'none';
+}
+function viewImage(src) { document.getElementById('viewer-img').src = src; document.getElementById('viewer').classList.add('show'); }
+
+let mediaRecorder = null;
+let audioChunks = [];
+let activeField = null;
+
+async function startVoice(field) {
+  const btn = document.getElementById('voice-' + field);
+  const statusEl = document.getElementById('voice-status-' + field);
+
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    activeField = field;
+    mediaRecorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4' });
+
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) audioChunks.push(e.data); };
+
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      btn.textContent = '🎤 语音输入';
+      btn.classList.remove('recording');
+
+      if (audioChunks.length === 0) { statusEl.textContent = '未录到声音'; return; }
+
+      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      if (blob.size < 1000) { statusEl.textContent = '录音太短，请重试'; return; }
+      statusEl.textContent = '正在识别语音并提炼...';
+      statusEl.style.color = 'var(--primary)';
+
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          // Step 1: Speech to text via qwen-audio
+          const asrResp = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + DASHSCOPE_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'qwen-audio-turbo', input: { messages: [{ role: 'user', content: [{ audio: reader.result }, { text: '请把这段语音逐字转写成文字，只输出文字内容。' }] }] } }),
+          });
+          const asrData = await asrResp.json();
+          const rawText = asrData.output?.choices?.[0]?.message?.content?.[0]?.text || '';
+          if (!rawText.trim()) { statusEl.textContent = '未识别到语音'; statusEl.style.color = '#d9534f'; return; }
+
+          // Step 2: Refine with LLM
+          const prompt = activeField === 'medication'
+            ? '以下是医生口述的用药指导语音转文字，请提取核心用药信息，去掉语气词，输出简洁的用药方案（药名+剂量+频次），每条一行。只输出内容：\n\n' + rawText
+            : '以下是语音转文字，请提取核心信息，去掉语气词，保留关键事实，输出简洁文字。只输出内容：\n\n' + rawText;
+          const llmData = await callDashscope([{ role: 'user', content: prompt }]);
+          const refined = llmData.choices?.[0]?.message?.content || rawText;
+
+          const textarea = document.getElementById('f-' + activeField);
+          textarea.value = textarea.value ? textarea.value + '\n' + refined : refined;
+          statusEl.textContent = '已提炼并填入';
+          statusEl.style.color = '#5cb85c';
+        } catch (e) {
+          statusEl.textContent = '识别出错: ' + e.message;
+          statusEl.style.color = '#d9534f';
+        }
+      };
+      reader.readAsDataURL(blob);
+    };
+
+    mediaRecorder.start(500);
+    btn.textContent = '⏹ 停止录音';
+    btn.classList.add('recording');
+    statusEl.textContent = '正在录音...说完请点停止';
+    statusEl.style.color = 'var(--text2)';
+  } catch (e) {
+    if (e.name === 'NotAllowedError') statusEl.textContent = '请允许麦克风权限';
+    else statusEl.textContent = '无法启动录音: ' + e.message;
+    statusEl.style.color = '#d9534f';
+  }
+}
+
+async function ocrExtract() {
+  if (currentImages.length === 0) return;
+  const btn = document.getElementById('btn-ocr');
+  const statusEl = document.getElementById('ocr-status');
+  btn.disabled = true; btn.textContent = '正在识别中...';
+  statusEl.style.display = 'block'; statusEl.style.color = 'var(--text2)';
+  statusEl.textContent = '正在通过AI识别血常规报告，请稍候...';
+
+  try {
+    const ocrPrompt = `这是一张血常规检查报告图片。请完成两件事：
+1. 识别报告上的检查日期（如"2026-06-22"格式）
+2. 提取报告中的【全部】检验指标，报告上有多少就提取多少。
+严格按以下JSON格式返回，不要其他文字：
+{"date":"检查日期YYYY-MM-DD或null","indicators":[{"abbr":"英文缩写","name":"中文名","value":数值,"unit":"单位","ref_low":下限或null,"ref_high":上限或null}]}`;
+
+    const data = await callDashscope([{
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: currentImages[0] } },
+        { type: 'text', text: ocrPrompt },
+      ],
+    }], 'qwen-vl-plus');
+
+    const content = data.choices?.[0]?.message?.content || '';
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const v = JSON.parse(jsonMatch[0]);
+      if (v.date) document.getElementById('f-date').value = v.date;
+      if (v.indicators && Array.isArray(v.indicators)) {
+        currentAllIndicators = v.indicators;
+        let filled = 0;
+        for (const ind of v.indicators) {
+          const abbr = (ind.abbr || '').toUpperCase();
+          const mapped = ABBR_MAP[abbr];
+          if (mapped && ind.value !== null && ind.value !== undefined) {
+            document.getElementById('f-' + mapped).value = ind.value;
+            filled++;
+          }
+        }
+        renderOcrExtraTable(v.indicators);
+        statusEl.textContent = `已识别 ${v.indicators.length} 项指标，${filled} 项已填入核心字段，请核对后保存`;
+        statusEl.style.color = '#5cb85c';
+      } else {
+        statusEl.textContent = '未能提取指标'; statusEl.style.color = '#d9534f';
+      }
+    } else {
+      statusEl.textContent = '识别失败: ' + content.substring(0, 80);
+      statusEl.style.color = '#d9534f';
+    }
+  } catch (e) {
+    statusEl.textContent = '识别出错: ' + e.message;
+    statusEl.style.color = '#d9534f';
+  }
+  btn.disabled = false; btn.textContent = 'AI 识别报告';
+}
+
+function renderOcrExtraTable(indicators) {
+  const section = document.getElementById('ocr-extra-section');
+  const table = document.getElementById('ocr-extra-table');
+  if (!indicators || indicators.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  table.innerHTML = `<tr><th>指标</th><th>结果</th><th>参考范围</th></tr>` +
+    indicators.map(ind => {
+      let cls = '';
+      if (ind.ref_low !== null && ind.ref_high !== null && ind.value !== null) {
+        if (ind.value < ind.ref_low) cls = 'low';
+        else if (ind.value > ind.ref_high) cls = 'high';
+        else cls = 'normal';
+      }
+      const ref = (ind.ref_low !== null && ind.ref_high !== null) ? `${ind.ref_low}-${ind.ref_high}` : '-';
+      const arrow = cls === 'low' ? ' ↓' : cls === 'high' ? ' ↑' : '';
+      return `<tr><td>${ind.name}<br><span class="ref">${ind.abbr || ''}</span></td><td class="val ${cls}">${ind.value}${arrow} <span class="ref">${ind.unit || ''}</span></td><td class="ref">${ref}</td></tr>`;
+    }).join('');
+}
+
+function renderIndicatorTable(el, indicators) {
+  if (!indicators || indicators.length === 0) { el.innerHTML = '<div style="color:var(--text2);font-size:13px">无指标数据</div>'; return; }
+  el.innerHTML = `<tr><th>指标</th><th>结果</th><th>参考范围</th></tr>` +
+    indicators.map(ind => {
+      let cls = '';
+      if (ind.ref_low != null && ind.ref_high != null && ind.value != null) {
+        if (ind.value < ind.ref_low) cls = 'low';
+        else if (ind.value > ind.ref_high) cls = 'high';
+        else cls = 'normal';
+      }
+      const ref = (ind.ref_low != null && ind.ref_high != null) ? `${ind.ref_low}-${ind.ref_high}` : '-';
+      const arrow = cls === 'low' ? ' ↓' : cls === 'high' ? ' ↑' : '';
+      return `<tr><td>${ind.name}<br><span class="ref">${ind.abbr || ''}</span></td><td class="val ${cls}">${ind.value}${arrow} <span class="ref">${ind.unit || ''}</span></td><td class="ref">${ref}</td></tr>`;
+    }).join('');
+}
+
+async function saveRecord() {
+  const date = document.getElementById('f-date').value;
+  if (!date) { alert('请选择检查日期'); return; }
+  const record = {
+    id: editingId || Date.now(), date,
+    wbc: parseFloat(document.getElementById('f-wbc').value) || null,
+    anc: parseFloat(document.getElementById('f-anc').value) || null,
+    hgb: parseFloat(document.getElementById('f-hgb').value) || null,
+    plt: parseFloat(document.getElementById('f-plt').value) || null,
+    lymph: parseFloat(document.getElementById('f-lymph').value) || null,
+    rbc: parseFloat(document.getElementById('f-rbc').value) || null,
+    medication: document.getElementById('f-medication').value.trim(),
+    notes: document.getElementById('f-notes').value.trim(),
+    images: currentImages,
+    all_indicators: currentAllIndicators,
+  };
+  const hasValue = KEY_INDICATORS.some(ind => record[ind.key] !== null);
+  const hasMedication = record.medication.length > 0;
+  const hasNotes = record.notes.length > 0;
+  if (!hasValue && currentImages.length === 0 && currentAllIndicators.length === 0 && !hasMedication && !hasNotes) { alert('请至少填写一项内容'); return; }
+
+  await localPut(record);
+  if (isOnline) {
+    try {
+      await sbRequest('blood_records', 'POST', {
+        id: record.id, family_id: DEVICE_ID, date: record.date, wbc: record.wbc, anc: record.anc, hgb: record.hgb, plt: record.plt,
+        lymph: record.lymph, rbc: record.rbc, medication: record.medication, notes: record.notes, images: record.images,
+        all_indicators: record.all_indicators,
+      });
+    } catch (e) { console.warn('cloud save failed', e); }
+  }
+  editingId = null;
+  showPage('home');
+}
+
+function getStatus(key, val) {
+  if (val == null) return '';
+  const ind = KEY_INDICATORS.find(i => i.key === key);
+  if (!ind) return '';
+  if (val < ind.low) return 'low';
+  if (val > ind.high) return 'high';
+  return 'normal';
+}
+function statusIcon(s) { return s === 'low' ? '↓' : s === 'high' ? '↑' : ''; }
+
+async function refreshHome() {
+  const records = await localGetAll();
+  const listEl = document.getElementById('record-list');
+  const emptyEl = document.getElementById('list-empty');
+  const latestCard = document.getElementById('latest-card');
+
+  if (records.length === 0) {
+    listEl.innerHTML = ''; emptyEl.style.display = 'block'; latestCard.style.display = 'none';
+    document.getElementById('chart-empty').style.display = 'block';
+    document.querySelector('.chart-wrap').style.display = 'none';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  const latest = records[0];
+  latestCard.style.display = 'block';
+  document.getElementById('latest-date').textContent = latest.date;
+  document.getElementById('latest-metrics').innerHTML = KEY_INDICATORS
+    .filter(ind => latest[ind.key] !== null)
+    .map(ind => {
+      const s = getStatus(ind.key, latest[ind.key]);
+      return `<div class="metric-item ${s}"><div class="label">${ind.name}</div><div class="value">${latest[ind.key]}${statusIcon(s)}</div><div class="range">${ind.low}-${ind.high} ${ind.unit}</div></div>`;
+    }).join('');
+
+  listEl.innerHTML = records.map(r => {
+    const tags = KEY_INDICATORS.filter(ind => r[ind.key] !== null).map(ind => {
+      const s = getStatus(ind.key, r[ind.key]);
+      return `<span class="tag ${s === 'low' || s === 'high' ? 'warn' : ''}">${ind.name} ${r[ind.key]}</span>`;
+    }).join('');
+    const imgIcon = r.images && r.images.length ? '<span class="has-img">📎</span>' : '';
+    const extraCount = r.all_indicators && r.all_indicators.length ? `<span class="tag">${r.all_indicators.length}项</span>` : '';
+    return `<div class="record-item" onclick="showDetail(${r.id})"><div class="date">${r.date}</div><div class="summary">${tags}${extraCount}</div>${imgIcon}<span class="arrow">›</span></div>`;
+  }).join('');
+  renderChart(records);
+}
+
+function renderChartTabs() {
+  document.getElementById('chart-tabs').innerHTML = KEY_INDICATORS.map(ind =>
+    `<button class="chart-tab ${ind.key === activeChartKey ? 'active' : ''}" onclick="switchChart('${ind.key}')">${ind.name}</button>`
+  ).join('');
+}
+function switchChart(key) { activeChartKey = key; renderChartTabs(); refreshHome(); }
+
+function renderChart(records) {
+  const data = [...records].reverse().filter(r => r[activeChartKey] !== null);
+  if (data.length < 2) {
+    document.getElementById('chart-empty').style.display = 'block';
+    document.querySelector('.chart-wrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('chart-empty').style.display = 'none';
+  document.querySelector('.chart-wrap').style.display = 'block';
+  const ind = KEY_INDICATORS.find(i => i.key === activeChartKey);
+  const labels = data.map(r => r.date.slice(5));
+  const values = data.map(r => r[activeChartKey]);
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(document.getElementById('trend-chart'), {
+    type: 'line',
+    data: { labels, datasets: [{ label: ind.name, data: values, borderColor: '#e8866a', backgroundColor: 'rgba(232,134,106,0.1)', fill: true, tension: 0.3, pointRadius: 4,
+      pointBackgroundColor: values.map(v => v < ind.low ? '#d9534f' : v > ind.high ? '#e8866a' : '#5cb85c'),
+    }]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { y: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 11 } } }, x: { grid: { display: false }, ticks: { font: { size: 11 } } } },
+    },
+    plugins: [{ id: 'refLines', beforeDraw(chart) {
+      const { ctx, scales: { y } } = chart; const area = chart.chartArea;
+      const yL = y.getPixelForValue(ind.low), yH = y.getPixelForValue(ind.high);
+      ctx.save(); ctx.fillStyle = 'rgba(39,174,96,0.08)'; ctx.fillRect(area.left, yH, area.right - area.left, yL - yH);
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(39,174,96,0.4)';
+      [yL, yH].forEach(py => { ctx.beginPath(); ctx.moveTo(area.left, py); ctx.lineTo(area.right, py); ctx.stroke(); });
+      ctx.restore();
+    }}],
+  });
+}
+
+async function refreshMedication() {
+  const records = await localGetAll();
+  const meds = records.filter(r => r.medication);
+  const listEl = document.getElementById('med-list');
+  const emptyEl = document.getElementById('med-empty');
+
+  if (meds.length === 0) { listEl.innerHTML = ''; emptyEl.style.display = 'block'; return; }
+  emptyEl.style.display = 'none';
+
+  listEl.innerHTML = meds.map(r => {
+    return `<div class="card" onclick="showDetail(${r.id})" style="cursor:pointer">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:14px;font-weight:600">${r.date}</span>
+        <span class="arrow" style="color:var(--text2);font-size:16px">›</span>
+      </div>
+      <div style="font-size:14px;line-height:1.8;white-space:pre-wrap">${r.medication}</div>
+    </div>`;
+  }).join('');
+}
+
+let currentDetailId = null;
+async function showDetail(id) {
+  const records = await localGetAll();
+  const r = records.find(rec => rec.id === id);
+  if (!r) return;
+  currentDetailId = id;
+  document.getElementById('detail-date').textContent = r.date;
+
+  const allInd = r.all_indicators && r.all_indicators.length > 0 ? r.all_indicators :
+    KEY_INDICATORS.filter(ind => r[ind.key] !== null).map(ind => ({
+      abbr: ind.abbr, name: ind.name, value: r[ind.key], unit: ind.unit, ref_low: ind.low, ref_high: ind.high
+    }));
+  renderIndicatorTable(document.getElementById('detail-indicators'), allInd);
+
+  const imgCard = document.getElementById('detail-images-card');
+  const imgEl = document.getElementById('detail-images');
+  if (r.images && r.images.length) { imgCard.style.display = 'block'; imgEl.innerHTML = r.images.map(src => `<img src="${src}" onclick="viewImage(this.src)">`).join(''); }
+  else { imgCard.style.display = 'none'; }
+  const medCard = document.getElementById('detail-medication-card');
+  if (r.medication) { medCard.style.display = 'block'; document.getElementById('detail-medication').textContent = r.medication; }
+  else { medCard.style.display = 'none'; }
+  const notesCard = document.getElementById('detail-notes-card');
+  if (r.notes) { notesCard.style.display = 'block'; document.getElementById('detail-notes').textContent = r.notes; }
+  else { notesCard.style.display = 'none'; }
+  showPage('detail');
+}
+
+async function editRecord() {
+  const records = await localGetAll();
+  const r = records.find(rec => rec.id === currentDetailId);
+  if (!r) return;
+  editingId = r.id;
+  document.getElementById('add-title').textContent = '编辑记录';
+  document.getElementById('f-date').value = r.date;
+  KEY_INDICATORS.forEach(ind => document.getElementById('f-' + ind.key).value = r[ind.key] !== null ? r[ind.key] : '');
+  document.getElementById('f-medication').value = r.medication || '';
+  document.getElementById('f-notes').value = r.notes || '';
+  currentImages = r.images ? [...r.images] : [];
+  currentAllIndicators = r.all_indicators || [];
+  renderImagePreviews();
+  if (currentAllIndicators.length > 0) renderOcrExtraTable(currentAllIndicators);
+  showPage('add');
+}
+
+async function deleteRecord() {
+  if (!confirm('确定删除这条记录吗？')) return;
+  await localDelete(currentDetailId);
+  if (isOnline) {
+    try { await sbRequest('blood_records?id=eq.' + currentDetailId + '&family_id=eq.' + DEVICE_ID, 'DELETE'); } catch (e) {}
+  }
+  showPage('home');
+}
+
+async function exportData() {
+  const records = await localGetAll();
+  if (records.length === 0) { alert('暂无数据可导出'); return; }
+  let csv = '日期,WBC,ANC,HGB,PLT,LYMPH,RBC,备注\n';
+  records.forEach(r => csv += `${r.date},${r.wbc??''},${r.anc??''},${r.hgb??''},${r.plt??''},${r.lymph??''},${r.rbc??''},"${r.notes??''}"\n`);
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `血象记录_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+}
+
+function saveSettings() {
+  const dk = document.getElementById('s-dashscope').value.trim();
+  if (!dk) { alert('请填写 DashScope API Key'); return; }
+  localStorage.setItem('dashscope_key', dk);
+  const sbUrl = document.getElementById('s-sb-url').value.trim();
+  const sbKey = document.getElementById('s-sb-key').value.trim();
+  if (sbUrl) localStorage.setItem('sb_url', sbUrl);
+  if (sbKey) localStorage.setItem('sb_key', sbKey);
+  location.reload();
+}
+
+(async () => {
+  await openLocalDB();
+
+  if (!localStorage.getItem('dashscope_key')) {
+    document.getElementById('page-settings').classList.add('active');
+  } else {
+    document.getElementById('page-home').classList.add('active');
+    document.querySelector('.tab-bar').style.display = 'flex';
+    renderChartTabs();
+    refreshHome();
+    syncFromCloud();
+  }
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
