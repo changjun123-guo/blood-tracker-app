@@ -115,8 +115,23 @@ body {
 </head>
 <body>
 
+<!-- 设置页 -->
+<div id="page-setup" class="page">
+  <div class="setup-page">
+    <div class="setup-logo">血象记录</div>
+    <div class="setup-sub">首次使用，请配置以下信息</div>
+    <div class="setup-card">
+      <div class="form-group"><label>AI Key（DashScope）</label><input type="text" id="s-dk" placeholder="sk-..." style="font-size:14px"></div>
+      <div class="form-group"><label>数据库地址（选填）</label><input type="text" id="s-su" placeholder="https://xxx.supabase.co" style="font-size:14px"></div>
+      <div class="form-group"><label>数据库密钥（选填）</label><input type="text" id="s-sk" placeholder="sb_publishable_..." style="font-size:14px"></div>
+      <div class="ref-note" style="margin-bottom:12px">AI Key 用于报告识别和语音输入；数据库用于云端同步，不填则仅本地存储。配置保存在手机上，只需填一次。</div>
+      <button class="btn btn-primary" onclick="saveSetup()">保存并开始</button>
+    </div>
+  </div>
+</div>
+
 <!-- 首页 -->
-<div id="page-home" class="page active">
+<div id="page-home" class="page">
   <div class="header">血象记录</div>
   <div id="latest-card" class="card" style="display:none">
     <div style="font-size:14px;font-weight:600;margin-bottom:10px">
@@ -229,7 +244,7 @@ body {
 </div>
 
 <!-- 底部导航 -->
-<div class="tab-bar">
+<div class="tab-bar" style="display:none">
   <div class="tab active" onclick="showPage('home')"><span class="icon">📋</span>报告</div>
   <div class="tab" onclick="showPage('medication')"><span class="icon">💊</span>用药</div>
   <div class="tab" onclick="showPage('add')"><span class="icon" style="color:var(--primary)">⊕</span>添加</div>
@@ -244,10 +259,9 @@ body {
 
 <script>
 const DEVICE_ID = 'SELF01';
-const _d = s => atob(s);
-const DASHSCOPE_KEY = _d('c2std3MtSC5SUEVZTURQLm1qVXQuTUVRQ0lBdDRqNXU1STlHcWpzM1BDdGRvZ3cxNlVhS2t3aVhwVzBPektrQ3VSSFZNQWlBa0ZQRFBOQVFNYlVKSFdWaU0zWS1lQi1RTnF5YkRXU3Y2SGNBQndnb1Zadw==');
-const SB_URL = _d('aHR0cHM6Ly9ydmx5bmtxZW9zc2Zia3FyamFsYy5zdXBhYmFzZS5jbw==');
-const SB_KEY = _d('c2JfcHVibGlzaGFibGVfS2djdmNZVHNRNDJFWFJUWVNEMS1rQV9jRW9QOUhrTw==');
+let DASHSCOPE_KEY = localStorage.getItem('dk') || '';
+let SB_URL = localStorage.getItem('su') || '';
+let SB_KEY = localStorage.getItem('sk') || '';
 
 async function sbRequest(path, method, body) {
   const resp = await fetch(SB_URL + '/rest/v1/' + path, {
@@ -800,11 +814,31 @@ async function exportData() {
   a.download = `血象记录_${new Date().toISOString().slice(0,10)}.csv`; a.click();
 }
 
+function saveSetup() {
+  const dk = document.getElementById('s-dk').value.trim();
+  if (!dk) { alert('请填写 AI Key'); return; }
+  localStorage.setItem('dk', dk);
+  const su = document.getElementById('s-su').value.trim();
+  const sk = document.getElementById('s-sk').value.trim();
+  if (su) localStorage.setItem('su', su);
+  if (sk) localStorage.setItem('sk', sk);
+  location.reload();
+}
+
 (async () => {
   await openLocalDB();
-  renderChartTabs();
-  refreshHome();
-  syncFromCloud();
+  if (!localStorage.getItem('dk')) {
+    document.getElementById('page-setup').classList.add('active');
+  } else {
+    DASHSCOPE_KEY = localStorage.getItem('dk');
+    SB_URL = localStorage.getItem('su') || '';
+    SB_KEY = localStorage.getItem('sk') || '';
+    document.getElementById('page-home').classList.add('active');
+    document.querySelector('.tab-bar').style.display = 'flex';
+    renderChartTabs();
+    refreshHome();
+    syncFromCloud();
+  }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
