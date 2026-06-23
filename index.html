@@ -547,7 +547,7 @@ async function ocrExtract() {
           { type: 'image_url', image_url: { url: currentImages[i] } },
           { type: 'text', text: ocrPrompt },
         ],
-      }], 'qwen-vl-plus');
+      }], 'qwen-vl-max');
 
       const content = data.choices?.[0]?.message?.content || '';
       const jsonMatch = content.match(/\{[\s\S]*\}/);
