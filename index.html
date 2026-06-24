@@ -112,16 +112,6 @@ body {
 .ind-table .high { color: #e8866a; }
 .ind-table .normal { color: #5cb85c; }
 .ind-table .ref { color: var(--text2); font-size: 11px; }
-.analysis-loading { color: var(--text2); font-size: 13px; }
-.analysis-loading .dot { animation: pulse 1.2s infinite; }
-.analysis-item { margin-bottom: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.7; }
-.analysis-item.warn { background: #fde8d8; }
-.analysis-item.safe { background: #e8f5e9; }
-.analysis-item.info { background: var(--bg); }
-.analysis-item .title { font-weight: 600; margin-bottom: 4px; }
-.analysis-item .warn-title { color: #c0614a; }
-.analysis-item .safe-title { color: #388e3c; }
-.analysis-error { color: var(--danger); font-size: 13px; cursor: pointer; text-align: center; padding: 12px; }
 </style>
 </head>
 <body>
@@ -156,13 +146,6 @@ body {
     </div>
     <div id="chart-empty" class="empty" style="display:none"><div class="icon">📊</div><div>添加两条以上记录后显示趋势</div></div>
     <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
-  </div>
-  <div id="analysis-card" class="card" style="display:none">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span style="font-size:14px;font-weight:600">指标分析</span>
-      <button class="chart-tab" onclick="generateAnalysis(true)" id="analysis-refresh">刷新</button>
-    </div>
-    <div id="analysis-content"></div>
   </div>
   <div class="card">
     <div style="font-size:14px;font-weight:600;margin-bottom:8px">历史记录</div>
@@ -791,95 +774,6 @@ async function refreshHome() {
     return `<div class="record-item" onclick="showDetail(${r.id})"><div class="date">${r.date}</div><div class="summary">${tags}${extraCount}</div>${imgIcon}<span class="arrow">›</span></div>`;
   }).join('');
   renderChart(records);
-  generateAnalysis();
-}
-
-let analysisRunning = false;
-async function generateAnalysis(force) {
-  const card = document.getElementById('analysis-card');
-  const content = document.getElementById('analysis-content');
-  if (!DASHSCOPE_KEY) { card.style.display = 'none'; return; }
-
-  const records = await localGetAll();
-  if (records.length === 0) { card.style.display = 'none'; return; }
-
-  card.style.display = 'block';
-  const latest = records[0];
-  const cacheKey = 'analysis_' + latest.id;
-
-  if (!force) {
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) { content.innerHTML = cached; return; }
-  }
-
-  if (analysisRunning) return;
-  analysisRunning = true;
-  content.innerHTML = '<div class="analysis-loading">正在分析指标<span class="dot">...</span></div>';
-
-  const recentRecords = records.slice(0, 3);
-  const indicatorData = recentRecords.map(r => {
-    const items = KEY_INDICATORS.filter(ind => r[ind.key] !== null)
-      .map(ind => `${ind.name}(${ind.abbr}): ${r[ind.key]} ${ind.unit}`).join('、');
-    return `${r.date}: ${items}`;
-  }).join('\n');
-
-  const latestStatus = KEY_INDICATORS.filter(ind => latest[ind.key] !== null).map(ind => {
-    const v = latest[ind.key];
-    let s = '在维持期正常范围内';
-    if (v < ind.low) s = `低于维持期下限${ind.low}，需关注`;
-    else if (v > ind.high) s = `高于维持期上限${ind.high}`;
-    return `- ${ind.name}(${ind.abbr}): ${v} ${ind.unit}，${s}`;
-  }).join('\n');
-
-  const prompt = `你是一位血液科医生助手。患者正处于化疗维持期。
-
-【最新检查结果及状态判定】（请严格以此判定为准，不要自行重新判断）：
-${latestStatus}
-
-【历史数据（用于趋势分析）】：
-${indicatorData}
-
-【重要】维持期参考范围与正常人不同，不要用健康人标准（如WBC 4-10）来判断：
-- WBC：2.0-4.0（在此范围内就是正常的，说明骨髓抑制控制得当）
-- ANC：0.75-1.5（在此范围内是正常的）
-- HGB：≥90 即可
-- PLT：≥75 即可
-- LYMPH：0.8-4.0
-- RBC：3.5-5.5
-
-请严格按照上面的【状态判定】来分析，如果标注"在维持期正常范围内"则该指标status必须是safe。
-
-输出JSON格式，不要其他文字：
-{"items":[{"indicator":"指标名","status":"warn或safe","title":"一句话结论","detail":"具体建议"}]}
-
-规则：
-- status严格依据上面的状态判定，正常范围内=safe，低于下限=warn
-- safe的指标title写"XX正常，维持期控制良好"
-- warn的指标给出具体风险和可操作的生活建议
-- 如果有多条记录，在detail中说明趋势（好转/恶化/稳定）
-- warn排前面，safe排后面`;
-
-  try {
-    const data = await callDashscope([{ role: 'user', content: prompt }], 'qwen-plus');
-    const text = data.choices?.[0]?.message?.content || '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const result = JSON.parse(jsonMatch[0]);
-      const html = result.items.map(item => {
-        const cls = item.status === 'warn' ? 'warn' : 'safe';
-        const titleCls = item.status === 'warn' ? 'warn-title' : 'safe-title';
-        const icon = item.status === 'warn' ? '⚠️' : '✅';
-        return `<div class="analysis-item ${cls}"><div class="title ${titleCls}">${icon} ${item.title}</div><div>${item.detail}</div></div>`;
-      }).join('');
-      content.innerHTML = html;
-      localStorage.setItem(cacheKey, html);
-    } else {
-      content.innerHTML = `<div class="analysis-item info">${text}</div>`;
-    }
-  } catch (e) {
-    content.innerHTML = '<div class="analysis-error" onclick="generateAnalysis(true)">分析生成失败，点击重试</div>';
-  }
-  analysisRunning = false;
 }
 
 function renderChartTabs() {
