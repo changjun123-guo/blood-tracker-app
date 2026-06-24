@@ -206,11 +206,25 @@ body {
     </div>
   </div>
   <div class="card">
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px">就诊信息</div>
+    <div class="form-row">
+      <div class="form-group"><label>就诊日期</label><input type="date" id="f-med-date"></div>
+      <div class="form-group"><label>医生姓名</label><input type="text" id="f-doctor" placeholder="如 张主任"></div>
+    </div>
+    <div class="form-group"><label>诊断</label><input type="text" id="f-diagnosis" placeholder="如 ALL维持期"></div>
     <div class="form-group">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <label>用药指导</label>
-        <button class="voice-btn" onclick="startVoice('medication')" id="voice-medication">🎤 语音输入</button>
+        <div style="display:flex;gap:6px">
+          <label class="voice-btn" style="cursor:pointer">📷 拍病历<input type="file" accept="image/*" capture="environment" style="display:none" onchange="ocrMedication(event)"></label>
+          <label class="voice-btn" style="cursor:pointer">🖼️ 选图片<input type="file" accept="image/*" style="display:none" onchange="ocrMedication(event)"></label>
+          <button class="voice-btn" onclick="startVoice('medication')" id="voice-medication">🎤 语音</button>
+        </div>
       </div>
+      <div id="med-image-preview" style="margin:8px 0;display:none">
+        <img id="med-preview-img" style="width:100%;max-height:200px;object-fit:contain;border-radius:8px;cursor:pointer" onclick="viewImage(this.src)">
+      </div>
+      <div id="med-ocr-status" class="voice-status"></div>
       <textarea id="f-medication" placeholder="医生给的用药方案，如：6-MP 25mg 每晚一次、MTX 10mg 每周一次"></textarea>
       <div id="voice-status-medication" class="voice-status"></div>
     </div>
@@ -236,6 +250,10 @@ body {
   <div id="detail-images-card" class="card" style="display:none">
     <div style="font-size:14px;font-weight:600;margin-bottom:8px">检查报告</div>
     <div id="detail-images" class="detail-images"></div>
+  </div>
+  <div id="detail-visit-card" class="card" style="display:none">
+    <div style="font-size:14px;font-weight:600;margin-bottom:8px">就诊信息</div>
+    <div id="detail-visit" style="font-size:14px;line-height:1.8"></div>
   </div>
   <div id="detail-medication-card" class="card" style="display:none">
     <div style="font-size:14px;font-weight:600;margin-bottom:8px">用药指导</div>
@@ -404,6 +422,9 @@ function resetForm() {
   document.getElementById('add-title').textContent = '添加记录';
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
   ['wbc','anc','hgb','plt','lymph','rbc'].forEach(k => document.getElementById('f-' + k).value = '');
+  document.getElementById('f-med-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('f-doctor').value = '';
+  document.getElementById('f-diagnosis').value = '';
   document.getElementById('f-medication').value = '';
   document.getElementById('f-notes').value = '';
   currentImages = [];
@@ -411,6 +432,8 @@ function resetForm() {
   renderImagePreviews();
   document.getElementById('ocr-extra-section').style.display = 'none';
   document.getElementById('ocr-status').style.display = 'none';
+  document.getElementById('med-image-preview').style.display = 'none';
+  document.getElementById('med-ocr-status').style.display = 'none';
 }
 
 function compressImage(file, maxW = 600) {
@@ -436,6 +459,46 @@ let ocrTimer = null;
 async function addImage(e) { const f = e.target.files[0]; if (!f) return; currentImages.push(await compressImage(f)); renderImagePreviews(); e.target.value = ''; scheduleOcr(); }
 async function addImages(e) { for (const f of Array.from(e.target.files)) currentImages.push(await compressImage(f)); renderImagePreviews(); e.target.value = ''; scheduleOcr(); }
 function scheduleOcr() { if (ocrTimer) clearTimeout(ocrTimer); ocrTimer = setTimeout(() => { ocrTimer = null; ocrExtract(); }, 1500); }
+
+async function ocrMedication(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  const statusEl = document.getElementById('med-ocr-status');
+  const previewWrap = document.getElementById('med-image-preview');
+  const previewImg = document.getElementById('med-preview-img');
+
+  const imgData = await compressImage(file, 1200);
+  previewImg.src = imgData;
+  previewWrap.style.display = 'block';
+
+  statusEl.textContent = '正在识别病历...';
+  statusEl.style.display = 'block';
+  statusEl.style.color = 'var(--primary)';
+
+  try {
+    const data = await callDashscope([{
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: imgData } },
+        { type: 'text', text: '这是一张医生开具的病历/处方/用药指导。请提取其中的用药方案，整理为简洁的格式：每种药物一行，包含药名、剂量、用法用量。去掉无关信息，只保留用药相关内容。如果图片中还包含医嘱或注意事项，也请提取。只输出整理后的内容，不要其他说明文字。' },
+      ],
+    }], 'qwen-vl-max');
+    const content = data.choices?.[0]?.message?.content || '';
+    if (content.trim()) {
+      const textarea = document.getElementById('f-medication');
+      textarea.value = textarea.value ? textarea.value + '\n' + content.trim() : content.trim();
+      statusEl.textContent = '已识别并填入用药指导';
+      statusEl.style.color = '#5cb85c';
+    } else {
+      statusEl.textContent = '未识别到用药信息';
+      statusEl.style.color = '#d9534f';
+    }
+  } catch (err) {
+    statusEl.textContent = '识别失败: ' + err.message;
+    statusEl.style.color = '#d9534f';
+  }
+}
 function removeImage(idx) { currentImages.splice(idx, 1); renderImagePreviews(); }
 function renderImagePreviews() {
   const area = document.getElementById('image-area');
@@ -657,6 +720,9 @@ async function saveRecord() {
     plt: parseFloat(document.getElementById('f-plt').value) || null,
     lymph: parseFloat(document.getElementById('f-lymph').value) || null,
     rbc: parseFloat(document.getElementById('f-rbc').value) || null,
+    med_date: document.getElementById('f-med-date').value || '',
+    doctor: document.getElementById('f-doctor').value.trim(),
+    diagnosis: document.getElementById('f-diagnosis').value.trim(),
     medication: document.getElementById('f-medication').value.trim(),
     notes: document.getElementById('f-notes').value.trim(),
     images: currentImages,
@@ -672,8 +738,8 @@ async function saveRecord() {
     try {
       await sbRequest('blood_records', 'POST', {
         id: record.id, family_id: DEVICE_ID, date: record.date, wbc: record.wbc, anc: record.anc, hgb: record.hgb, plt: record.plt,
-        lymph: record.lymph, rbc: record.rbc, medication: record.medication, notes: record.notes, images: record.images,
-        all_indicators: record.all_indicators,
+        lymph: record.lymph, rbc: record.rbc, med_date: record.med_date, doctor: record.doctor, diagnosis: record.diagnosis,
+        medication: record.medication, notes: record.notes, images: record.images, all_indicators: record.all_indicators,
       });
     } catch (e) { console.warn('cloud save failed', e); }
   }
@@ -854,11 +920,13 @@ async function refreshMedication() {
   emptyEl.style.display = 'none';
 
   listEl.innerHTML = meds.map(r => {
+    const visitInfo = [r.doctor ? `医生：${r.doctor}` : '', r.diagnosis ? `诊断：${r.diagnosis}` : ''].filter(Boolean).join(' · ');
     return `<div class="card" onclick="showDetail(${r.id})" style="cursor:pointer">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-size:14px;font-weight:600">${r.date}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:14px;font-weight:600">${r.med_date || r.date}</span>
         <span class="arrow" style="color:var(--text2);font-size:16px">›</span>
       </div>
+      ${visitInfo ? `<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${visitInfo}</div>` : ''}
       <div style="font-size:14px;line-height:1.8;white-space:pre-wrap">${r.medication}</div>
     </div>`;
   }).join('');
@@ -877,6 +945,17 @@ async function showDetail(id) {
       abbr: ind.abbr, name: ind.name, value: r[ind.key], unit: ind.unit, ref_low: ind.low, ref_high: ind.high
     }));
   renderIndicatorTable(document.getElementById('detail-indicators'), allInd);
+
+  const visitCard = document.getElementById('detail-visit-card');
+  const visitEl = document.getElementById('detail-visit');
+  if (r.doctor || r.diagnosis || r.med_date) {
+    visitCard.style.display = 'block';
+    const parts = [];
+    if (r.med_date) parts.push(`<div>就诊日期：${r.med_date}</div>`);
+    if (r.doctor) parts.push(`<div>医生：${r.doctor}</div>`);
+    if (r.diagnosis) parts.push(`<div>诊断：${r.diagnosis}</div>`);
+    visitEl.innerHTML = parts.join('');
+  } else { visitCard.style.display = 'none'; }
 
   const imgCard = document.getElementById('detail-images-card');
   const imgEl = document.getElementById('detail-images');
@@ -899,6 +978,9 @@ async function editRecord() {
   document.getElementById('add-title').textContent = '编辑记录';
   document.getElementById('f-date').value = r.date;
   KEY_INDICATORS.forEach(ind => document.getElementById('f-' + ind.key).value = r[ind.key] !== null ? r[ind.key] : '');
+  document.getElementById('f-med-date').value = r.med_date || '';
+  document.getElementById('f-doctor').value = r.doctor || '';
+  document.getElementById('f-diagnosis').value = r.diagnosis || '';
   document.getElementById('f-medication').value = r.medication || '';
   document.getElementById('f-notes').value = r.notes || '';
   currentImages = r.images ? [...r.images] : [];
