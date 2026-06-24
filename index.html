@@ -9,6 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <title>血象记录</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
@@ -1012,11 +1013,49 @@ async function deleteRecord() {
 async function exportData() {
   const records = await localGetAll();
   if (records.length === 0) { alert('暂无数据可导出'); return; }
-  let csv = '日期,WBC,ANC,HGB,PLT,LYMPH,RBC,备注\n';
-  records.forEach(r => csv += `${r.date},${r.wbc??''},${r.anc??''},${r.hgb??''},${r.plt??''},${r.lymph??''},${r.rbc??''},"${r.notes??''}"\n`);
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `血象记录_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+
+  const rows = records.map(r => ({
+    '检查日期': r.date,
+    '白细胞WBC': r.wbc ?? '',
+    '中性粒细胞ANC': r.anc ?? '',
+    '血红蛋白HGB': r.hgb ?? '',
+    '血小板PLT': r.plt ?? '',
+    '淋巴细胞LYMPH': r.lymph ?? '',
+    '红细胞RBC': r.rbc ?? '',
+    '就诊日期': r.med_date ?? '',
+    '医生': r.doctor ?? '',
+    '诊断': r.diagnosis ?? '',
+    '用药指导': r.medication ?? '',
+    '备注': r.notes ?? '',
+  }));
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    {wch:12},{wch:10},{wch:12},{wch:12},{wch:10},{wch:12},{wch:10},
+    {wch:12},{wch:10},{wch:16},{wch:30},{wch:20}
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, '血象记录');
+
+  const fileName = `血象记录_${new Date().toISOString().slice(0,10)}.xlsx`;
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+
+  if (/MicroMessenger/i.test(navigator.userAgent)) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML = `<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;max-width:300px">
+      <div style="font-size:16px;font-weight:600;margin-bottom:12px">导出血象记录</div>
+      <a href="${url}" download="${fileName}" style="display:block;padding:12px;background:linear-gradient(135deg,#e8866a,#f4a98c);color:#fff;border-radius:8px;text-decoration:none;font-weight:600;margin-bottom:10px">点击下载 Excel</a>
+      <div style="font-size:12px;color:#999;margin-bottom:12px">如无法直接下载，请长按上方按钮选择「在浏览器中打开」</div>
+      <button onclick="this.parentElement.parentElement.remove()" style="padding:8px 20px;border:1px solid #ddd;border-radius:8px;background:none;color:#666;font-size:14px">关闭</button>
+    </div>`;
+    document.body.appendChild(overlay);
+  } else {
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; a.click();
+  }
 }
 
 const CONFIG_SB = 'https://rvlynkqeossfbkqrjalc.supabase.co';
