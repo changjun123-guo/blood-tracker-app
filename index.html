@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="血象记录">
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" id="apple-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='30' fill='%23e8866a'/><text x='90' y='122' font-size='75' text-anchor='middle' fill='white'>血</text></svg>">
 <title>血象记录</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -94,6 +95,22 @@ body {
 .empty { text-align: center; padding: 40px 20px; color: var(--text2); }
 .empty .icon { font-size: 48px; margin-bottom: 12px; }
 .ref-note { font-size: 11px; color: var(--text2); margin-top: 8px; line-height: 1.6; }
+.anc-tip { margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.5; }
+.anc-tip.danger { background: #fde8e8; color: #c0392b; border-left: 3px solid #e74c3c; }
+.anc-tip.warning { background: #fef3e2; color: #b8700a; border-left: 3px solid #f0ad4e; }
+.anc-tip.safe { background: #e8f8e8; color: #27753b; border-left: 3px solid #5cb85c; }
+.anc-tip .tip-title { font-weight: 600; margin-bottom: 2px; }
+.next-check { margin: 12px; padding: 12px 16px; background: linear-gradient(135deg, #fff5e6, #fff0db); border-radius: 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.next-check .countdown { font-size: 20px; font-weight: 700; color: var(--primary); }
+.next-check .check-label { font-size: 13px; color: var(--text2); }
+.next-check .check-date { font-size: 12px; color: var(--text2); }
+.temp-fab { position: fixed; right: 16px; bottom: calc(80px + var(--safe-bottom)); width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, #e8866a, #f4a98c); color: #fff; border: none; font-size: 20px; box-shadow: 0 3px 10px rgba(232,134,106,0.4); cursor: pointer; z-index: 50; display: flex; align-items: center; justify-content: center; }
+.temp-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: flex-end; justify-content: center; }
+.temp-modal.show { display: flex; }
+.temp-modal .modal-content { background: var(--card); border-radius: 16px 16px 0 0; padding: 20px; width: 100%; max-width: 500px; padding-bottom: calc(20px + var(--safe-bottom)); }
+.temp-today { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.temp-tag { padding: 4px 10px; border-radius: 14px; font-size: 12px; background: var(--bg); }
+.temp-tag.fever { background: #fde8e8; color: #c0392b; font-weight: 600; }
 .detail-images { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .detail-images img { width: calc(50% - 4px); border-radius: 8px; cursor: pointer; }
 .voice-btn {
@@ -132,11 +149,28 @@ body {
 <!-- 首页 -->
 <div id="page-home" class="page">
   <div class="header">血象记录</div>
+  <div id="next-check-bar" class="next-check" style="display:none" onclick="showPage('add')">
+    <span style="font-size:22px">🩺</span>
+    <div style="flex:1">
+      <div id="check-countdown" class="countdown"></div>
+      <div class="check-label">距下次复查</div>
+      <div id="check-date-text" class="check-date"></div>
+    </div>
+    <span class="arrow" style="color:var(--text2)">›</span>
+  </div>
+  <div id="today-temp-bar" class="card" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:14px;font-weight:600">🌡️ 今日体温</span>
+      <button class="voice-btn" onclick="showTempModal()">+ 记录</button>
+    </div>
+    <div id="today-temp-list" class="temp-today"></div>
+  </div>
   <div id="latest-card" class="card" style="display:none">
     <div style="font-size:14px;font-weight:600;margin-bottom:10px">
       最新指标 <span id="latest-date" style="font-weight:400;color:var(--text2);font-size:12px"></span>
     </div>
     <div id="latest-metrics" class="metrics-grid"></div>
+    <div id="anc-tip" class="anc-tip" style="display:none"></div>
     <div class="ref-note">维持期参考：WBC 2.0-4.0 · ANC 0.75-1.5 · PLT >75 · HGB >90</div>
   </div>
   <div class="card">
@@ -220,6 +254,10 @@ body {
       <textarea id="f-notes" placeholder="身体状况、不良反应等"></textarea>
       <div id="voice-status-notes" class="voice-status"></div>
     </div>
+    <div class="form-group">
+      <label>下次复查日期（选填）</label>
+      <input type="date" id="f-next-check">
+    </div>
     <button class="btn btn-primary" onclick="saveRecord()">保存记录</button>
   </div>
 </div>
@@ -247,6 +285,10 @@ body {
     <div style="font-size:14px;font-weight:600;margin-bottom:8px">备注</div>
     <div id="detail-notes" style="font-size:14px;line-height:1.6;white-space:pre-wrap"></div>
   </div>
+  <div id="detail-next-check-card" class="card" style="display:none">
+    <div style="font-size:14px;font-weight:600;margin-bottom:8px">🩺 下次复查</div>
+    <div id="detail-next-check" style="font-size:16px;font-weight:600;color:var(--primary)"></div>
+  </div>
   <div class="card">
     <button class="btn btn-outline" onclick="editRecord()">编辑</button>
     <button class="btn btn-danger" onclick="deleteRecord()" style="margin-top:8px">删除记录</button>
@@ -267,6 +309,22 @@ body {
   <div class="tab" onclick="showPage('add')"><span class="icon" style="color:var(--primary)">⊕</span>添加</div>
   <div class="tab" onclick="exportData()"><span class="icon">📤</span>导出</div>
 </div>
+
+<!-- 体温记录浮层 -->
+<div id="temp-modal" class="temp-modal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal-content">
+    <div style="font-size:16px;font-weight:600;margin-bottom:14px">记录体温</div>
+    <div class="form-row">
+      <div class="form-group"><label>体温 °C</label><input type="number" id="f-temp" step="0.1" placeholder="如 36.8" inputmode="decimal" style="font-size:20px;text-align:center"></div>
+      <div class="form-group"><label>时间</label><input type="time" id="f-temp-time"></div>
+    </div>
+    <div id="temp-warning" style="display:none;padding:8px 12px;background:#fde8e8;color:#c0392b;border-radius:8px;font-size:13px;margin-bottom:10px">⚠️ 体温 ≥ 38°C，请密切观察，必要时就医</div>
+    <button class="btn btn-primary" onclick="saveTemp()">保存体温</button>
+  </div>
+</div>
+
+<!-- 体温 FAB -->
+<button id="temp-fab" class="temp-fab" style="display:none" onclick="showTempModal()">🌡️</button>
 
 <!-- 图片查看器 -->
 <div id="viewer" class="viewer" onclick="this.classList.remove('show')">
@@ -297,8 +355,9 @@ async function callDashscope(messages, model) {
   return resp.json();
 }
 const DB_NAME = 'BloodTrackerDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE = 'records';
+const TEMP_STORE = 'temperatures';
 
 const KEY_INDICATORS = [
   { key: 'wbc',   name: '白细胞',     abbr: 'WBC',   unit: '×10⁹/L',  low: 2.0, high: 4.0 },
@@ -334,6 +393,7 @@ function openLocalDB() {
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(TEMP_STORE)) db.createObjectStore(TEMP_STORE, { keyPath: 'id' });
     };
     req.onsuccess = e => { localDB = e.target.result; resolve(); };
     req.onerror = e => reject(e);
@@ -411,6 +471,7 @@ function resetForm() {
   document.getElementById('f-diagnosis').value = '';
   document.getElementById('f-medication').value = '';
   document.getElementById('f-notes').value = '';
+  document.getElementById('f-next-check').value = '';
   currentImages = [];
   currentAllIndicators = [];
   renderImagePreviews();
@@ -709,9 +770,11 @@ async function saveRecord() {
     diagnosis: document.getElementById('f-diagnosis').value.trim(),
     medication: document.getElementById('f-medication').value.trim(),
     notes: document.getElementById('f-notes').value.trim(),
+    next_check: document.getElementById('f-next-check').value || '',
     images: currentImages,
     all_indicators: currentAllIndicators,
   };
+  if (record.next_check) localStorage.setItem('next_check_date', record.next_check);
   const hasValue = KEY_INDICATORS.some(ind => record[ind.key] !== null);
   const hasMedication = record.medication.length > 0;
   const hasNotes = record.notes.length > 0;
@@ -731,6 +794,26 @@ async function saveRecord() {
   showPage('home');
 }
 
+function getKeyValue(record, key) {
+  if (record.all_indicators && record.all_indicators.length > 0) {
+    const ind = KEY_INDICATORS.find(i => i.key === key);
+    if (ind) {
+      const match = record.all_indicators.find(ai => {
+        const abbr = (ai.abbr || '').toUpperCase().replace(/[#＃]/g, '#');
+        const name = ai.name || '';
+        const unit = ai.unit || '';
+        const isPct = abbr.includes('%') || name.includes('百分比') || name.includes('比率') || unit === '%';
+        if (isPct) return false;
+        const mapped = ABBR_MAP[abbr] || ABBR_MAP[ai.abbr] ||
+          (function() { const k = Object.keys(NAME_MAP).find(k => name.includes(k)); return k ? NAME_MAP[k] : null; })();
+        return mapped === key;
+      });
+      if (match && match.value != null) return match.value;
+    }
+  }
+  return record[key];
+}
+
 function getStatus(key, val) {
   if (val == null) return '';
   const ind = KEY_INDICATORS.find(i => i.key === key);
@@ -747,8 +830,12 @@ async function refreshHome() {
   const emptyEl = document.getElementById('list-empty');
   const latestCard = document.getElementById('latest-card');
 
+  renderTodayTemp();
+  renderNextCheck(records);
+
   if (records.length === 0) {
     listEl.innerHTML = ''; emptyEl.style.display = 'block'; latestCard.style.display = 'none';
+    document.getElementById('anc-tip').style.display = 'none';
     document.getElementById('chart-empty').style.display = 'block';
     document.querySelector('.chart-wrap').style.display = 'none';
     return;
@@ -758,16 +845,18 @@ async function refreshHome() {
   latestCard.style.display = 'block';
   document.getElementById('latest-date').textContent = latest.date;
   document.getElementById('latest-metrics').innerHTML = KEY_INDICATORS
-    .filter(ind => latest[ind.key] !== null)
+    .map(ind => ({ ...ind, val: getKeyValue(latest, ind.key) }))
+    .filter(ind => ind.val != null)
     .map(ind => {
-      const s = getStatus(ind.key, latest[ind.key]);
-      return `<div class="metric-item ${s}"><div class="label">${ind.name}</div><div class="value">${latest[ind.key]}${statusIcon(s)}</div><div class="range">${ind.low}-${ind.high} ${ind.unit}</div></div>`;
+      const s = getStatus(ind.key, ind.val);
+      return `<div class="metric-item ${s}"><div class="label">${ind.name}</div><div class="value">${ind.val}${statusIcon(s)}</div><div class="range">${ind.low}-${ind.high} ${ind.unit}</div></div>`;
     }).join('');
+  renderAncTip(latest);
 
   listEl.innerHTML = records.map(r => {
-    const tags = KEY_INDICATORS.filter(ind => r[ind.key] !== null).map(ind => {
-      const s = getStatus(ind.key, r[ind.key]);
-      return `<span class="tag ${s === 'low' || s === 'high' ? 'warn' : ''}">${ind.name} ${r[ind.key]}</span>`;
+    const tags = KEY_INDICATORS.map(ind => ({ ...ind, val: getKeyValue(r, ind.key) })).filter(ind => ind.val != null).map(ind => {
+      const s = getStatus(ind.key, ind.val);
+      return `<span class="tag ${s === 'low' || s === 'high' ? 'warn' : ''}">${ind.name} ${ind.val}</span>`;
     }).join('');
     const imgIcon = r.images && r.images.length ? '<span class="has-img">📎</span>' : '';
     const extraCount = r.all_indicators && r.all_indicators.length ? `<span class="tag">${r.all_indicators.length}项</span>` : '';
@@ -784,7 +873,7 @@ function renderChartTabs() {
 function switchChart(key) { activeChartKey = key; renderChartTabs(); refreshHome(); }
 
 function renderChart(records) {
-  const data = [...records].reverse().filter(r => r[activeChartKey] !== null);
+  const data = [...records].reverse().filter(r => getKeyValue(r, activeChartKey) != null);
   if (data.length < 2) {
     document.getElementById('chart-empty').style.display = 'block';
     document.querySelector('.chart-wrap').style.display = 'none';
@@ -794,7 +883,7 @@ function renderChart(records) {
   document.querySelector('.chart-wrap').style.display = 'block';
   const ind = KEY_INDICATORS.find(i => i.key === activeChartKey);
   const labels = data.map(r => r.date.slice(5));
-  const values = data.map(r => r[activeChartKey]);
+  const values = data.map(r => getKeyValue(r, activeChartKey));
   if (trendChart) trendChart.destroy();
   trendChart = new Chart(document.getElementById('trend-chart'), {
     type: 'line',
@@ -872,6 +961,11 @@ async function showDetail(id) {
   const notesCard = document.getElementById('detail-notes-card');
   if (r.notes) { notesCard.style.display = 'block'; document.getElementById('detail-notes').textContent = r.notes; }
   else { notesCard.style.display = 'none'; }
+  const checkCard = document.getElementById('detail-next-check-card');
+  if (checkCard) {
+    if (r.next_check) { checkCard.style.display = 'block'; document.getElementById('detail-next-check').textContent = r.next_check; }
+    else { checkCard.style.display = 'none'; }
+  }
   showPage('detail');
 }
 
@@ -888,6 +982,7 @@ async function editRecord() {
   document.getElementById('f-diagnosis').value = r.diagnosis || '';
   document.getElementById('f-medication').value = r.medication || '';
   document.getElementById('f-notes').value = r.notes || '';
+  document.getElementById('f-next-check').value = r.next_check || '';
   currentImages = r.images ? [...r.images] : [];
   currentAllIndicators = r.all_indicators || [];
   renderImagePreviews();
@@ -910,12 +1005,12 @@ async function exportData() {
 
   const rows = records.map(r => ({
     '检查日期': r.date,
-    '白细胞WBC': r.wbc ?? '',
-    '中性粒细胞ANC': r.anc ?? '',
-    '血红蛋白HGB': r.hgb ?? '',
-    '血小板PLT': r.plt ?? '',
-    '淋巴细胞LYMPH': r.lymph ?? '',
-    '红细胞RBC': r.rbc ?? '',
+    '白细胞WBC': getKeyValue(r, 'wbc') ?? '',
+    '中性粒细胞ANC': getKeyValue(r, 'anc') ?? '',
+    '血红蛋白HGB': getKeyValue(r, 'hgb') ?? '',
+    '血小板PLT': getKeyValue(r, 'plt') ?? '',
+    '淋巴细胞LYMPH': getKeyValue(r, 'lymph') ?? '',
+    '红细胞RBC': getKeyValue(r, 'rbc') ?? '',
     '就诊日期': r.med_date ?? '',
     '医生': r.doctor ?? '',
     '诊断': r.diagnosis ?? '',
@@ -932,24 +1027,92 @@ async function exportData() {
   XLSX.utils.book_append_sheet(wb, ws, '血象记录');
 
   const fileName = `血象记录_${new Date().toISOString().slice(0,10)}.xlsx`;
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
 
   if (/MicroMessenger/i.test(navigator.userAgent)) {
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px';
-    overlay.innerHTML = `<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;max-width:300px">
-      <div style="font-size:16px;font-weight:600;margin-bottom:12px">导出血象记录</div>
-      <a href="${url}" download="${fileName}" style="display:block;padding:12px;background:linear-gradient(135deg,#e8866a,#f4a98c);color:#fff;border-radius:8px;text-decoration:none;font-weight:600;margin-bottom:10px">点击下载 Excel</a>
-      <div style="font-size:12px;color:#999;margin-bottom:12px">如无法直接下载，请长按上方按钮选择「在浏览器中打开」</div>
-      <button onclick="this.parentElement.parentElement.remove()" style="padding:8px 20px;border:1px solid #ddd;border-radius:8px;background:none;color:#666;font-size:14px">关闭</button>
-    </div>`;
-    document.body.appendChild(overlay);
+    await exportInWechat(wb, fileName, records);
   } else {
-    const a = document.createElement('a');
-    a.href = url; a.download = fileName; a.click();
+    XLSX.writeFile(wb, fileName);
   }
+}
+
+async function exportInWechat(wb, fileName, records) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `<div style="background:#fff;border-radius:12px;padding:20px;text-align:center;max-width:320px">
+    <div style="font-size:16px;font-weight:600;margin-bottom:12px">导出血象记录</div>
+    <div id="export-status" style="font-size:13px;color:var(--text2);margin-bottom:12px">正在准备文件...</div>
+    <div id="export-buttons" style="display:none">
+      <button id="btn-export-download" class="btn btn-primary" style="margin-top:0">下载 Excel 文件</button>
+      <button id="btn-export-copy" class="btn btn-secondary" style="margin-top:8px">复制数据到剪贴板</button>
+    </div>
+    <button onclick="this.parentElement.parentElement.remove()" style="padding:8px 20px;border:1px solid #ddd;border-radius:8px;background:none;color:#666;font-size:14px;margin-top:12px">关闭</button>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  const statusEl = overlay.querySelector('#export-status');
+  const buttonsEl = overlay.querySelector('#export-buttons');
+  const downloadBtn = overlay.querySelector('#btn-export-download');
+  const copyBtn = overlay.querySelector('#btn-export-copy');
+
+  let downloadUrl = null;
+
+  if (SB_URL && SB_KEY) {
+    try {
+      statusEl.textContent = '正在上传文件...';
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const path = `blood_exports/${DEVICE_ID}/${fileName}`;
+      const uploadResp = await fetch(SB_URL + '/storage/v1/object/blood-exports/' + path, {
+        method: 'POST',
+        headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'x-upsert': 'true' },
+        body: blob,
+      });
+      if (uploadResp.ok) {
+        const signResp = await fetch(SB_URL + '/storage/v1/object/sign/blood-exports/' + path, {
+          method: 'POST',
+          headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expiresIn: 3600 }),
+        });
+        if (signResp.ok) {
+          const signData = await signResp.json();
+          downloadUrl = SB_URL + '/storage/v1' + signData.signedURL;
+        }
+      }
+    } catch (e) { console.warn('Supabase Storage upload failed:', e); }
+  }
+
+  buttonsEl.style.display = 'block';
+
+  if (downloadUrl) {
+    statusEl.textContent = '文件已准备好';
+    downloadBtn.onclick = () => { window.open(downloadUrl, '_blank'); };
+  } else {
+    statusEl.textContent = '无法直接下载，请使用剪贴板复制';
+    downloadBtn.style.display = 'none';
+  }
+
+  copyBtn.onclick = async () => {
+    const header = '检查日期\tWBC\tANC\tHGB\tPLT\tLYMPH\tRBC\t用药指导\t备注';
+    const lines = records.map(r =>
+      [r.date, getKeyValue(r,'wbc')??'', getKeyValue(r,'anc')??'', getKeyValue(r,'hgb')??'', getKeyValue(r,'plt')??'', getKeyValue(r,'lymph')??'', getKeyValue(r,'rbc')??'', r.medication??'', r.notes??''].join('\t')
+    );
+    const tsv = header + '\n' + lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(tsv);
+      copyBtn.textContent = '已复制！打开 Excel 粘贴即可';
+      copyBtn.style.background = '#5cb85c';
+      copyBtn.style.color = '#fff';
+      copyBtn.style.borderColor = '#5cb85c';
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = tsv; ta.style.cssText = 'position:fixed;left:-999px';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+      copyBtn.textContent = '已复制！打开 Excel 粘贴即可';
+      copyBtn.style.background = '#5cb85c';
+      copyBtn.style.color = '#fff';
+      copyBtn.style.borderColor = '#5cb85c';
+    }
+  };
 }
 
 const CONFIG_SB = 'https://rvlynkqeossfbkqrjalc.supabase.co';
@@ -986,23 +1149,208 @@ async function verifyPasscode() {
   }
 }
 
+// === 体温记录 ===
+function tempGetAll() {
+  return new Promise((resolve, reject) => {
+    const tx = localDB.transaction(TEMP_STORE, 'readonly');
+    const req = tx.objectStore(TEMP_STORE).getAll();
+    req.onsuccess = () => resolve(req.result.sort((a, b) => b.id - a.id));
+    req.onerror = e => reject(e);
+  });
+}
+function tempPut(r) {
+  return new Promise((resolve, reject) => {
+    const tx = localDB.transaction(TEMP_STORE, 'readwrite');
+    tx.objectStore(TEMP_STORE).put(r);
+    tx.oncomplete = () => resolve();
+    tx.onerror = e => reject(e);
+  });
+}
+
+function showTempModal() {
+  const modal = document.getElementById('temp-modal');
+  document.getElementById('f-temp').value = '';
+  const now = new Date();
+  document.getElementById('f-temp-time').value = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  document.getElementById('temp-warning').style.display = 'none';
+  modal.classList.add('show');
+  document.getElementById('f-temp').focus();
+}
+
+document.getElementById('f-temp')?.addEventListener('input', function() {
+  const v = parseFloat(this.value);
+  document.getElementById('temp-warning').style.display = (v >= 38.0) ? 'block' : 'none';
+});
+
+async function saveTemp() {
+  const temp = parseFloat(document.getElementById('f-temp').value);
+  if (!temp || temp < 34 || temp > 43) { alert('请输入有效体温（34~43°C）'); return; }
+  const time = document.getElementById('f-temp-time').value;
+  const today = new Date().toISOString().split('T')[0];
+  await tempPut({ id: Date.now(), date: today, time, temp });
+  document.getElementById('temp-modal').classList.remove('show');
+  refreshHome();
+}
+
+async function renderTodayTemp() {
+  const today = new Date().toISOString().split('T')[0];
+  const temps = await tempGetAll();
+  const todayTemps = temps.filter(t => t.date === today);
+  const bar = document.getElementById('today-temp-bar');
+  const list = document.getElementById('today-temp-list');
+
+  if (todayTemps.length === 0) {
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = 'block';
+  list.innerHTML = todayTemps.map(t => {
+    const isFever = t.temp >= 38.0;
+    return `<span class="temp-tag ${isFever ? 'fever' : ''}">${t.time} ${t.temp}°C${isFever ? ' ⚠️' : ''}</span>`;
+  }).join('');
+}
+
+// === ANC 剂量提示 ===
+function renderAncTip(record) {
+  const tipEl = document.getElementById('anc-tip');
+  const anc = getKeyValue(record, 'anc');
+  if (anc == null) { tipEl.style.display = 'none'; return; }
+
+  let cls, title, msg;
+  if (anc < 0.5) {
+    cls = 'danger';
+    title = '⚠️ ANC 过低（' + anc + '）';
+    msg = '感染风险较高，注意发热症状，避免人群密集场所。体温超过38°C请立即就医。';
+  } else if (anc < 0.75) {
+    cls = 'warning';
+    title = '📉 ANC 偏低（' + anc + '）';
+    msg = '建议咨询医生是否需要减少化疗药物剂量，注意防护。';
+  } else if (anc <= 1.5) {
+    cls = 'safe';
+    title = '✅ ANC 在目标范围（' + anc + '）';
+    msg = '维持期 ANC 目标 0.75~1.5，当前剂量合适。';
+  } else {
+    cls = 'warning';
+    title = '📈 ANC 偏高（' + anc + '）';
+    msg = '建议咨询医生是否需要增加化疗药物剂量，确保治疗强度。';
+  }
+
+  tipEl.className = 'anc-tip ' + cls;
+  tipEl.innerHTML = `<div class="tip-title">${title}</div><div>${msg}</div>`;
+  tipEl.style.display = 'block';
+}
+
+// === 复查提醒 ===
+function renderNextCheck(records) {
+  const bar = document.getElementById('next-check-bar');
+  const countdownEl = document.getElementById('check-countdown');
+  const dateTextEl = document.getElementById('check-date-text');
+
+  const nextCheck = localStorage.getItem('next_check_date');
+  if (!nextCheck) { bar.style.display = 'none'; return; }
+
+  const checkDate = new Date(nextCheck + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.ceil((checkDate - today) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < -7) { bar.style.display = 'none'; return; }
+
+  bar.style.display = 'flex';
+  dateTextEl.textContent = nextCheck;
+
+  if (diffDays < 0) {
+    countdownEl.textContent = '已过 ' + Math.abs(diffDays) + ' 天';
+    countdownEl.style.color = '#d9534f';
+    bar.style.background = 'linear-gradient(135deg, #fde8e8, #fce4e4)';
+  } else if (diffDays === 0) {
+    countdownEl.textContent = '今天复查';
+    countdownEl.style.color = '#d9534f';
+    bar.style.background = 'linear-gradient(135deg, #fef3e2, #fff0db)';
+  } else if (diffDays <= 3) {
+    countdownEl.textContent = diffDays + ' 天后';
+    countdownEl.style.color = '#e8866a';
+    bar.style.background = 'linear-gradient(135deg, #fef3e2, #fff0db)';
+  } else {
+    countdownEl.textContent = diffDays + ' 天后';
+    countdownEl.style.color = 'var(--primary)';
+    bar.style.background = 'linear-gradient(135deg, #fff5e6, #fff0db)';
+  }
+}
+
 function enterApp() {
   DASHSCOPE_KEY = localStorage.getItem('dk');
   SB_URL = localStorage.getItem('su') || '';
   SB_KEY = localStorage.getItem('sk') || '';
   document.getElementById('page-home').classList.add('active');
   document.querySelector('.tab-bar').style.display = 'flex';
+  document.getElementById('temp-fab').style.display = 'flex';
   renderChartTabs();
   refreshHome();
   syncFromCloud();
 }
 
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; });
+
+function generateAppleIcon() {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 180; c.height = 180;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#e8866a';
+    ctx.beginPath(); ctx.roundRect(0, 0, 180, 180, 30); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 75px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('血', 90, 95);
+    const link = document.getElementById('apple-icon');
+    if (link) link.href = c.toDataURL('image/png');
+  } catch (e) {}
+}
+
+function showInstallGuide() {
+  if (window.matchMedia('(display-mode: standalone)').matches) return;
+  if (localStorage.getItem('install_dismissed')) return;
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+  if (!isIOS && !isAndroid) return;
+
+  const guide = document.createElement('div');
+  guide.className = 'card';
+  guide.style.cssText = 'margin:12px;background:linear-gradient(135deg,#fff5e6,#fff0db)';
+  guide.innerHTML = `<div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:28px">📲</span>
+    <div style="flex:1">
+      <div style="font-size:14px;font-weight:600;margin-bottom:2px">添加到桌面</div>
+      <div style="font-size:12px;color:var(--text2)">${isIOS
+        ? '点击 Safari 底部分享按钮 → 「添加到主屏幕」'
+        : '点击右侧安装，像 App 一样使用'}</div>
+    </div>
+    ${!isIOS && deferredPrompt ? '<button class="btn btn-primary" style="width:auto;padding:8px 16px;margin:0" id="btn-pwa-install">安装</button>' : ''}
+    <span style="cursor:pointer;color:var(--text2);font-size:18px" onclick="this.parentElement.parentElement.remove();localStorage.setItem(\'install_dismissed\',\'1\')">✕</span>
+  </div>`;
+
+  const homeCard = document.querySelector('#page-home .card');
+  if (homeCard) homeCard.parentElement.insertBefore(guide, homeCard);
+
+  if (!isIOS && deferredPrompt) {
+    document.getElementById('btn-pwa-install')?.addEventListener('click', async () => {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      guide.remove();
+    });
+  }
+}
+
 (async () => {
+  generateAppleIcon();
   await openLocalDB();
   if (!localStorage.getItem('dk')) {
     document.getElementById('page-setup').classList.add('active');
   } else {
     enterApp();
+    setTimeout(showInstallGuide, 2000);
   }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
