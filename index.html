@@ -1315,36 +1315,47 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferr
 
 function showInstallGuide() {
   if (window.matchMedia('(display-mode: standalone)').matches) return;
+  if (navigator.standalone) return;
   if (localStorage.getItem('install_dismissed')) return;
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const isAndroid = /Android/.test(navigator.userAgent);
-  if (!isIOS && !isAndroid) return;
+  const ua = navigator.userAgent;
+
+  let steps;
+  if (deferredPrompt) {
+    steps = null;
+  } else if (isIOS) {
+    steps = '点击 Safari 底部 <strong>分享按钮 ↑</strong> → 选择「添加到主屏幕」';
+  } else if (/HuaweiBrowser/i.test(ua)) {
+    steps = '点击右下角 <strong>··· 菜单</strong> → 选择「添加到桌面」';
+  } else {
+    steps = '点击右上角 <strong>⋮ 菜单</strong> → 选择「添加到主屏幕」或「安装应用」';
+  }
 
   const guide = document.createElement('div');
   guide.className = 'card';
+  guide.id = 'install-guide';
   guide.style.cssText = 'margin:12px;background:linear-gradient(135deg,#fff5e6,#fff0db)';
-  guide.innerHTML = `<div style="display:flex;align-items:center;gap:10px">
-    <span style="font-size:28px">📲</span>
+  guide.innerHTML = `<div style="display:flex;align-items:flex-start;gap:10px">
+    <span style="font-size:28px;line-height:1.2">📲</span>
     <div style="flex:1">
-      <div style="font-size:14px;font-weight:600;margin-bottom:2px">添加到桌面</div>
-      <div style="font-size:12px;color:var(--text2)">${isIOS
-        ? '点击 Safari 底部分享按钮 → 「添加到主屏幕」'
-        : '点击右侧安装，像 App 一样使用'}</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:4px">添加到桌面，像 App 一样使用</div>
+      ${steps ? `<div style="font-size:12px;color:var(--text2);line-height:1.6">${steps}</div>` : ''}
+      ${deferredPrompt ? '<button class="btn btn-primary" style="width:auto;padding:8px 16px;margin:6px 0 0" id="btn-pwa-install">点击安装</button>' : ''}
     </div>
-    ${!isIOS && deferredPrompt ? '<button class="btn btn-primary" style="width:auto;padding:8px 16px;margin:0" id="btn-pwa-install">安装</button>' : ''}
-    <span style="cursor:pointer;color:var(--text2);font-size:18px" onclick="this.parentElement.parentElement.remove();localStorage.setItem(\'install_dismissed\',\'1\')">✕</span>
+    <span style="cursor:pointer;color:var(--text2);font-size:18px;line-height:1" onclick="this.parentElement.parentElement.remove();localStorage.setItem('install_dismissed','1')">✕</span>
   </div>`;
 
-  const homeCard = document.querySelector('#page-home .card');
-  if (homeCard) homeCard.parentElement.insertBefore(guide, homeCard);
+  const firstCard = document.querySelector('#page-home .card, #page-home .next-check');
+  if (firstCard) firstCard.parentElement.insertBefore(guide, firstCard);
 
-  if (!isIOS && deferredPrompt) {
+  if (deferredPrompt) {
     document.getElementById('btn-pwa-install')?.addEventListener('click', async () => {
       deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
+      const { outcome } = await deferredPrompt.userChoice;
       deferredPrompt = null;
       guide.remove();
+      if (outcome === 'accepted') localStorage.setItem('install_dismissed', '1');
     });
   }
 }
