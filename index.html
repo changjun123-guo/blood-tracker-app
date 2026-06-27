@@ -377,9 +377,11 @@ const ABBR_MAP = {
   'LY#': 'lymph', 'LYMPH#': 'lymph', 'LYMPH': 'lymph', 'LYM#': 'lymph', 'L#': 'lymph', 'LYM': 'lymph',
 };
 const NAME_MAP = {
-  '白细胞': 'wbc', '红细胞': 'rbc', '血红蛋白': 'hgb', '血小板': 'plt',
-  '中性粒细胞绝对值': 'anc', '中性粒细胞计数': 'anc', '中性粒细胞数': 'anc', '中性粒细胞数目': 'anc',
-  '淋巴细胞绝对值': 'lymph', '淋巴细胞计数': 'lymph', '淋巴细胞数': 'lymph', '淋巴细胞数目': 'lymph',
+  '中性粒细胞绝对值': 'anc', '中性粒细胞计数': 'anc', '中性粒细胞数目': 'anc', '中性粒细胞数': 'anc',
+  '淋巴细胞绝对值': 'lymph', '淋巴细胞计数': 'lymph', '淋巴细胞数目': 'lymph', '淋巴细胞数': 'lymph',
+  '白细胞计数': 'wbc', '白细胞数': 'wbc', '白细胞数目': 'wbc',
+  '红细胞计数': 'rbc', '红细胞数': 'rbc', '红细胞数目': 'rbc',
+  '血小板计数': 'plt', '血小板数': 'plt', '血小板数目': 'plt',
 };
 
 let localDB, currentImages = [], currentAllIndicators = [], editingId = null, trendChart = null, activeChartKey = 'wbc';
@@ -697,12 +699,7 @@ async function ocrExtract() {
     currentAllIndicators = allIndicators;
     let filled = 0;
     for (const ind of allIndicators) {
-      const abbr = (ind.abbr || '').toUpperCase();
-      const name = (ind.name || '');
-      const unit = (ind.unit || '');
-      const isPct = abbr.includes('%') || name.includes('百分比') || name.includes('比率') || unit === '%';
-      if (isPct) continue;
-      const mapped = ABBR_MAP[abbr] || ABBR_MAP[ind.abbr] || (function() { const k = Object.keys(NAME_MAP).find(k => name.includes(k)); return k ? NAME_MAP[k] : null; })();
+      const mapped = matchToKeyIndicator(ind);
       if (mapped && ind.value !== null && ind.value !== undefined && !document.getElementById('f-' + mapped).value) {
         document.getElementById('f-' + mapped).value = ind.value;
         filled++;
@@ -759,11 +756,7 @@ function mergeFormIntoIndicators(ocrIndicators) {
   for (const ki of KEY_INDICATORS) {
     const formVal = parseFloat(document.getElementById('f-' + ki.key).value);
     if (isNaN(formVal)) continue;
-    const abbrUp = ki.abbr.toUpperCase();
-    const existing = merged.find(ai => {
-      const aiAbbr = (ai.abbr || '').toUpperCase().replace(/[#＃]/g, '#');
-      return aiAbbr === abbrUp;
-    }) || merged.find(ai => ai.name === ki.name);
+    const existing = merged.find(ai => matchToKeyIndicator(ai) === ki.key);
     if (existing) {
       existing.value = formVal;
     } else {
@@ -813,30 +806,32 @@ async function saveRecord() {
   showPage('home');
 }
 
+function matchToKeyIndicator(ai) {
+  const aiAbbr = (ai.abbr || '').toUpperCase().replace(/[#＃]/g, '#');
+  const aiName = ai.name || '';
+  const aiUnit = ai.unit || '';
+  if (aiUnit === '%' || aiName.includes('百分比') || aiName.includes('比率') || aiAbbr.includes('%')) return null;
+
+  // 缩写匹配（ABBR_MAP 覆盖各种 OCR 变体）
+  const fromAbbr = ABBR_MAP[aiAbbr] || ABBR_MAP[ai.abbr];
+  if (fromAbbr) return fromAbbr;
+
+  // 名称匹配（NAME_MAP 覆盖中文名称变体）
+  for (const [namePat, key] of Object.entries(NAME_MAP)) {
+    if (aiName.includes(namePat)) return key;
+  }
+
+  // 兜底：KEY_INDICATORS 名称精确匹配
+  const exact = KEY_INDICATORS.find(ki => aiName === ki.name);
+  if (exact) return exact.key;
+
+  return null;
+}
+
 function getKeyValue(record, key) {
-  const ind = KEY_INDICATORS.find(i => i.key === key);
-  if (!ind) return record[key];
   if (!record.all_indicators || record.all_indicators.length === 0) return record[key];
-
-  const abbrUp = ind.abbr.toUpperCase();
-  const nonPct = record.all_indicators.filter(ai => {
-    const u = ai.unit || '', n = ai.name || '';
-    return u !== '%' && !n.includes('百分比') && !n.includes('比率');
-  });
-
-  // 1. 缩写精确匹配
-  const m1 = nonPct.find(ai => (ai.abbr || '').toUpperCase().replace(/[#＃]/g, '#') === abbrUp);
-  if (m1 && m1.value != null) return m1.value;
-
-  // 2. 名称精确匹配
-  const m2 = nonPct.find(ai => ai.name === ind.name);
-  if (m2 && m2.value != null) return m2.value;
-
-  // 3. 名称精确匹配（带"绝对值"/"计数"后缀）
-  const m3 = nonPct.find(ai => ai.name === ind.name + '绝对值' || ai.name === ind.name + '计数');
-  if (m3 && m3.value != null) return m3.value;
-
-  return record[key];
+  const match = record.all_indicators.find(ai => matchToKeyIndicator(ai) === key);
+  return (match && match.value != null) ? match.value : record[key];
 }
 
 function getStatus(key, val) {
