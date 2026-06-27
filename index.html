@@ -1313,6 +1313,35 @@ function enterApp() {
 let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; });
 
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+}
+
+function tryAutoFullscreen() {
+  if (isStandalone()) return;
+  if (!document.fullscreenEnabled && !document.webkitFullscreenEnabled) return;
+
+  const isFromHomeScreen = document.referrer === '' && !window.menubar?.visible;
+  if (!isFromHomeScreen && !localStorage.getItem('prefer_fullscreen')) return;
+
+  const banner = document.createElement('div');
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#e8866a,#f4a98c);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;cursor:pointer';
+  banner.innerHTML = `<div style="font-size:48px;margin-bottom:16px">🩸</div>
+    <div style="font-size:22px;font-weight:700;margin-bottom:8px">血象记录</div>
+    <div style="font-size:14px;opacity:0.8">点击进入全屏模式</div>`;
+  banner.onclick = () => {
+    const el = document.documentElement;
+    const rfs = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (rfs) {
+      rfs.call(el).then(() => {
+        localStorage.setItem('prefer_fullscreen', '1');
+      }).catch(() => {});
+    }
+    banner.remove();
+  };
+  document.body.appendChild(banner);
+}
+
 function showInstallGuide() {
   if (window.matchMedia('(display-mode: standalone)').matches) return;
   if (navigator.standalone) return;
@@ -1370,6 +1399,12 @@ function showInstallGuide() {
 }
 
 (async () => {
+  tryAutoFullscreen();
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && localStorage.getItem('prefer_fullscreen')) {
+      tryAutoFullscreen();
+    }
+  });
   await openLocalDB();
   if (!localStorage.getItem('dk')) {
     document.getElementById('page-setup').classList.add('active');
