@@ -754,6 +754,27 @@ function renderIndicatorTable(el, indicators) {
     }).join('');
 }
 
+function mergeFormIntoIndicators(ocrIndicators) {
+  const merged = ocrIndicators ? [...ocrIndicators] : [];
+  for (const ki of KEY_INDICATORS) {
+    const formVal = parseFloat(document.getElementById('f-' + ki.key).value);
+    if (isNaN(formVal)) continue;
+    const existing = merged.find(ai => {
+      const aiAbbr = (ai.abbr || '').toUpperCase().replace(/[#＃%]/g, '');
+      const aiName = ai.name || '';
+      const aiUnit = ai.unit || '';
+      if (aiUnit === '%' || aiName.includes('百分比') || aiName.includes('比率')) return false;
+      return aiAbbr === ki.abbr.toUpperCase() || aiName.includes(ki.name);
+    });
+    if (existing) {
+      existing.value = formVal;
+    } else {
+      merged.push({ abbr: ki.abbr, name: ki.name, value: formVal, unit: ki.unit, ref_low: ki.low, ref_high: ki.high });
+    }
+  }
+  return merged;
+}
+
 async function saveRecord() {
   const date = document.getElementById('f-date').value;
   if (!date) { alert('请选择检查日期'); return; }
@@ -772,7 +793,7 @@ async function saveRecord() {
     notes: document.getElementById('f-notes').value.trim(),
     next_check: document.getElementById('f-next-check').value || '',
     images: currentImages,
-    all_indicators: currentAllIndicators,
+    all_indicators: mergeFormIntoIndicators(currentAllIndicators),
   };
   if (record.next_check) localStorage.setItem('next_check_date', record.next_check);
   const hasValue = KEY_INDICATORS.some(ind => record[ind.key] !== null);
@@ -795,21 +816,20 @@ async function saveRecord() {
 }
 
 function getKeyValue(record, key) {
+  const ind = KEY_INDICATORS.find(i => i.key === key);
+  if (!ind) return record[key];
   if (record.all_indicators && record.all_indicators.length > 0) {
-    const ind = KEY_INDICATORS.find(i => i.key === key);
-    if (ind) {
-      const match = record.all_indicators.find(ai => {
-        const abbr = (ai.abbr || '').toUpperCase().replace(/[#＃]/g, '#');
-        const name = ai.name || '';
-        const unit = ai.unit || '';
-        const isPct = abbr.includes('%') || name.includes('百分比') || name.includes('比率') || unit === '%';
-        if (isPct) return false;
-        const mapped = ABBR_MAP[abbr] || ABBR_MAP[ai.abbr] ||
-          (function() { const k = Object.keys(NAME_MAP).find(k => name.includes(k)); return k ? NAME_MAP[k] : null; })();
-        return mapped === key;
-      });
-      if (match && match.value != null) return match.value;
-    }
+    const abbrUp = ind.abbr.toUpperCase();
+    const match = record.all_indicators.find(ai => {
+      const aiAbbr = (ai.abbr || '').toUpperCase().replace(/[#＃]/g, '#').replace(/%/g, '');
+      const aiName = ai.name || '';
+      const aiUnit = ai.unit || '';
+      if (aiAbbr.includes('%') || aiName.includes('百分比') || aiName.includes('比率') || aiUnit === '%') return false;
+      if (aiAbbr === abbrUp) return true;
+      if (ind.name && aiName.includes(ind.name)) return true;
+      return false;
+    });
+    if (match && match.value != null) return match.value;
   }
   return record[key];
 }
