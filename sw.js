@@ -1,7 +1,9 @@
-const CACHE_NAME = 'blood-tracker-v3';
+const CACHE_NAME = 'blood-tracker-v4';
 const ASSETS = [
   './',
   './index.html',
+  './icon-192.png',
+  './icon-512.png',
   'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js',
   'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js'
 ];

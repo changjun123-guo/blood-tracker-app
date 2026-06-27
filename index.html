@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="血象记录">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" id="apple-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='30' fill='%23e8866a'/><text x='90' y='122' font-size='75' text-anchor='middle' fill='white'>血</text></svg>">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>血象记录</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -1313,20 +1313,6 @@ function enterApp() {
 let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; });
 
-function generateAppleIcon() {
-  try {
-    const c = document.createElement('canvas');
-    c.width = 180; c.height = 180;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#e8866a';
-    ctx.beginPath(); ctx.roundRect(0, 0, 180, 180, 30); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 75px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('血', 90, 95);
-    const link = document.getElementById('apple-icon');
-    if (link) link.href = c.toDataURL('image/png');
-  } catch (e) {}
-}
-
 function showInstallGuide() {
   if (window.matchMedia('(display-mode: standalone)').matches) return;
   if (localStorage.getItem('install_dismissed')) return;
@@ -1364,7 +1350,6 @@ function showInstallGuide() {
 }
 
 (async () => {
-  generateAppleIcon();
   await openLocalDB();
   if (!localStorage.getItem('dk')) {
     document.getElementById('page-setup').classList.add('active');
